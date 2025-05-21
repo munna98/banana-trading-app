@@ -34,7 +34,7 @@ banana-trading-app/
 │   │   │   ├── add.js         # Add item
 │   │   │   └── [id].js        # Edit item
 │   │   ├── suppliers/
-│   │   │   ├── index.js       # List suppliers
+│   │   │   ├── index.js       # List suppliers 
 │   │   │   ├── add.js         # Add supplier
 │   │   │   └── [id].js        # Edit/View supplier detail with history
 │   │   ├── customers/
