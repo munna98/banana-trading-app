@@ -1,0 +1,78 @@
+banana-trading-app/
+├── electron/                  # Electron-specific code
+│   ├── main.js                # Main Electron process
+│   └── preload.js             # Preload script for IPC
+├── prisma/                    # Database schema and migrations
+│   └── schema.prisma          # Prisma schema file
+├── src/
+│   ├── components/            # Reusable UI components
+│   │   ├── Layout/
+│   │   │   ├── Header.jsx
+│   │   │   ├── Sidebar.jsx
+│   │   │   └── Layout.jsx
+│   │   ├── Forms/
+│   │   │   ├── ItemForm.jsx
+│   │   │   ├── SupplierForm.jsx
+│   │   │   ├── CustomerForm.jsx
+│   │   │   ├── PurchaseForm.jsx
+│   │   │   ├── SaleForm.jsx
+│   │   │   └── ExpenseForm.jsx
+│   │   ├── Tables/
+│   │   │   ├── ItemsTable.jsx
+│   │   │   ├── SuppliersTable.jsx
+│   │   │   ├── CustomersTable.jsx
+│   │   │   └── TransactionsTable.jsx
+│   │   └── UI/
+│   │       ├── Card.jsx
+│   │       ├── Button.jsx
+│   │       ├── Modal.jsx
+│   │       └── PrintInvoice.jsx
+│   ├── pages/                 # Next.js pages
+│   │   ├── index.js           # Dashboard
+│   │   ├── items/
+│   │   │   ├── index.js       # List items
+│   │   │   ├── add.js         # Add item
+│   │   │   └── [id].js        # Edit item
+│   │   ├── suppliers/
+│   │   │   ├── index.js       # List suppliers
+│   │   │   ├── add.js         # Add supplier
+│   │   │   └── [id].js        # Edit/View supplier detail with history
+│   │   ├── customers/
+│   │   │   ├── index.js       # List customers
+│   │   │   ├── add.js         # Add customer
+│   │   │   └── [id].js        # Edit/View customer detail with history
+│   │   ├── purchases/
+│   │   │   ├── index.js       # List purchases
+│   │   │   ├── add.js         # Add purchase
+│   │   │   └── [id].js        # View purchase details/print invoice
+│   │   ├── sales/
+│   │   │   ├── index.js       # List sales
+│   │   │   ├── add.js         # Add sale
+│   │   │   └── [id].js        # View sale details/print invoice
+│   │   ├── transactions/
+│   │   │   ├── index.js       # List all transactions
+│   │   │   ├── payments.js    # Make payment to supplier
+│   │   │   └── receipts.js    # Receive payment from customer
+│   │   ├── expenses/
+│   │   │   ├── index.js       # List expenses
+│   │   │   └── add.js         # Add expense
+│   │   └── reports/
+│   │       ├── index.js       # Reports dashboard
+│   │       ├── balance-sheet.js
+│   │       ├── profit-loss.js
+│   │       └── custom-report.js
+│   ├── lib/                   # Utility functions
+│   │   ├── db.js              # Database client
+│   │   ├── calculations.js    # Business logic for calculations
+│   │   └── printer.js         # Thermal printer integration
+│   ├── hooks/                 # Custom React hooks
+│   │   └── useForm.js
+│   ├── styles/                # CSS styles
+│   │   ├── globals.css
+│   │   └── components.css
+│   └── context/               # React context
+│       └── AppContext.js
+├── public/                    # Static assets
+│   ├── logo.png
+│   └── icons/
+└── package.json              # Project dependencies and scripts

@@ -1,0 +1,117 @@
+// DATABASE SCHEMA (PRISMA)
+// schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./banana-trading.db"
+}
+
+model Item {
+  id          Int       @id @default(autoincrement())
+  name        String
+  description String?
+  unit        String    @default("Kg")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  PurchaseItem PurchaseItem[]
+  SaleItem     SaleItem[]
+}
+
+model Supplier {
+  id          Int       @id @default(autoincrement())
+  name        String
+  phone       String?
+  address     String?
+  balance     Float     @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  purchases   Purchase[]
+  payments    Payment[]
+}
+
+model Customer {
+  id          Int       @id @default(autoincrement())
+  name        String
+  phone       String?
+  address     String?
+  balance     Float     @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  sales       Sale[]
+  receipts    Receipt[]
+}
+
+model Purchase {
+  id          Int       @id @default(autoincrement())
+  supplierId  Int
+  supplier    Supplier  @relation(fields: [supplierId], references: [id])
+  totalAmount Float
+  paidAmount  Float     @default(0)
+  balance     Float     @default(0)
+  date        DateTime  @default(now())
+  items       PurchaseItem[]
+}
+
+model PurchaseItem {
+  id          Int       @id @default(autoincrement())
+  purchaseId  Int
+  purchase    Purchase  @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  itemId      Int
+  item        Item      @relation(fields: [itemId], references: [id])
+  quantity    Float
+  weightDeduction Float  @default(1.5)  // 1.5kg default deduction per bunch
+  rate        Float
+  amount      Float
+}
+
+model Sale {
+  id          Int       @id @default(autoincrement())
+  customerId  Int
+  customer    Customer  @relation(fields: [customerId], references: [id])
+  totalAmount Float
+  receivedAmount Float  @default(0)
+  balance     Float     @default(0)
+  date        DateTime  @default(now())
+  items       SaleItem[]
+}
+
+model SaleItem {
+  id          Int       @id @default(autoincrement())
+  saleId      Int
+  sale        Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  itemId      Int
+  item        Item      @relation(fields: [itemId], references: [id])
+  quantity    Float
+  rate        Float
+  amount      Float
+}
+
+model Payment {
+  id          Int       @id @default(autoincrement())
+  supplierId  Int
+  supplier    Supplier  @relation(fields: [supplierId], references: [id])
+  amount      Float
+  notes       String?
+  date        DateTime  @default(now())
+}
+
+model Receipt {
+  id          Int       @id @default(autoincrement())
+  customerId  Int
+  customer    Customer  @relation(fields: [customerId], references: [id])
+  amount      Float
+  notes       String?
+  date        DateTime  @default(now())
+}
+
+model Expense {
+  id          Int       @id @default(autoincrement())
+  category    String
+  amount      Float
+  description String?
+  date        DateTime  @default(now())
+}
