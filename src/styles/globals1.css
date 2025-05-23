@@ -1,0 +1,159 @@
+/* styles/globals.css */
+
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+/* Basic styles for the entire application */
+html,
+body {
+  padding: 0;
+  margin: 0;
+  font-family: 'Inter', sans-serif; /* Using Inter font */
+  background-color: #f8fafc; /* Light background for the app */
+  color: #334155; /* Dark gray text color */
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Headings */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600; /* Semi-bold for headings */
+  color: #1e293b; /* Darker color for headings */
+}
+
+h1 {
+  font-size: 2.5rem; /* Larger for main titles */
+}
+
+h2 {
+  font-size: 2rem;
+}
+
+h3 {
+  font-size: 1.75rem;
+}
+
+/* Form elements basic styling */
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="password"],
+textarea,
+select {
+  @apply block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm;
+}
+
+/* Buttons basic styling (can be overridden by specific button components) */
+button {
+  @apply inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm;
+  @apply focus:outline-none focus:ring-2 focus:ring-offset-2;
+}
+
+/* Primary button style */
+.btn-primary {
+  @apply bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-500;
+}
+
+/* Secondary button style */
+.btn-secondary {
+  @apply bg-gray-200 text-gray-700 hover:bg-gray-300 focus:ring-gray-500;
+}
+
+/* Danger button style */
+.btn-danger {
+  @apply bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
+}
+
+/* Utility classes for layout and spacing */
+.container {
+  @apply mx-auto px-4 sm:px-6 lg:px-8;
+}
+
+.flex-center {
+  @apply flex items-center justify-center;
+}
+
+.py-4 {
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+
+.px-4 {
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+/* Custom scrollbar for better aesthetics */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #e2e8f0; /* Light gray track */
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #94a3b8; /* Medium gray thumb */
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #64748b; /* Darker gray on hover */
+}
+
+/* Ensure images are responsive */
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* General card styling (can be extended by Card.jsx) */
+.card {
+  @apply bg-white shadow-md rounded-lg p-6;
+}
+
+/* Table styling (can be extended by specific table components) */
+table {
+  @apply min-w-full divide-y divide-gray-200;
+}
+
+thead th {
+  @apply px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider;
+}
+
+tbody td {
+  @apply px-6 py-4 whitespace-nowrap text-sm text-gray-900;
+}
+
+tbody tr:nth-child(even) {
+  @apply bg-gray-50;
+}
+
+tbody tr:hover {
+  @apply bg-gray-100;
+}
+
+/* Add some basic focus styles for accessibility */
+:focus {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+:focus-visible {
+  outline: 2px solid #6366f1; /* Indigo focus ring */
+  outline-offset: 2px;
+  border-radius: 4px;
+}

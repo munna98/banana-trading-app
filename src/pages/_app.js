@@ -2,7 +2,7 @@
 // pages/_app.js
 
 import '../styles/globals.css';
-import { AppProvider } from '../context/AppContext';
+import { AppProvider } from '../context'; // ✅ Correct path
 import Layout from '../components/Layout/Layout';
 
 function MyApp({ Component, pageProps }) {

@@ -1,0 +1,37 @@
+/* src/styles/globals.css */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Add any custom global styles here that don't fit into Tailwind utilities */
+/* For example, custom fonts, basic body styles, etc. */
+
+body {
+  font-family: 'Inter', sans-serif; /* Example: Use a modern, readable font */
+  background-color: #f0f2f5; /* A very light, subtle background */
+  color: #333333; /* Dark gray for primary text for readability */
+  line-height: 1.6;
+}
+
+/* You might want some default link styles here */
+
+
+/* Hide Electron's default scrollbar if you want custom styling */
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}

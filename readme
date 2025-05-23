@@ -34,7 +34,7 @@ banana-trading-app/
 │   │   │   ├── add.js         # Add item
 │   │   │   └── [id].js        # Edit item
 │   │   ├── suppliers/
-│   │   │   ├── index.js       # List suppliers 
+│   │   │   ├── index.js       # List suppliers
 │   │   │   ├── add.js         # Add supplier
 │   │   │   └── [id].js        # Edit/View supplier detail with history
 │   │   ├── customers/
@@ -70,8 +70,28 @@ banana-trading-app/
 │   ├── styles/                # CSS styles
 │   │   ├── globals.css
 │   │   └── components.css
-│   └── context/               # React context
-│       └── AppContext.js
+│   └── context/
+│       ├── types/
+│       │   ├── actionTypes.js          # All action type constants
+│       │   └── initialState.js         # Initial state definition
+│       ├── reducers/
+│       │   ├── appReducer.js           # Main reducer (combines all)
+│       │   ├── dataReducer.js          # Items, suppliers, customers, etc.
+│       │   ├── transactionReducer.js   # Purchases, sales, payments, receipts
+│       │   └── uiReducer.js            # Loading, error, selections
+│       ├── services/
+│       │   ├── prismaService.js        # All Prisma database operations
+│       │   ├── itemService.js          # Item CRUD operations
+│       │   ├── supplierService.js      # Supplier CRUD operations
+│       │   ├── customerService.js      # Customer CRUD operations
+│       │   ├── purchaseService.js      # Purchase operations
+│       │   ├── saleService.js          # Sale operations
+│       │   └── expenseService.js       # Expense operations
+│       ├── hooks/
+│       │   ├── useStats.js             # Statistics calculations
+│       │   └── useDataFetching.js      # Data fetching logic
+│       ├── AppContext.js               # Main context provider (simplified)
+│       └── index.js                    # Export all context-related items
 ├── public/                    # Static assets
 │   ├── logo.png
 │   └── icons/

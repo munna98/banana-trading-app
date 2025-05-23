@@ -1,0 +1,222 @@
+here is my folder structure and sample code of Banana Trading Business Management System: it have Simple, intuitive UI for users with limited tech experience * Inventory management for different banana types * Supplier and customer management * Purchase entry with supplier selection, multiple items, custom rates * Weight adjustment feature (1.5kg deduction per bunch) * Payment tracking and balance management * Thermal printer invoice generation * Expense tracking * Custom reporting features now give me the following codes
+
+banana-trading-app/
+├── electron/                  # Electron-specific code
+│   ├── main.js                # Main Electron process
+│   └── preload.js             # Preload script for IPC
+├── prisma/                    # Database schema and migrations
+│   └── schema.prisma          # Prisma schema file
+├── src/
+│   ├── components/            # Reusable UI components
+│   │   ├── Layout/
+│   │   │   ├── Header.jsx
+│   │   │   ├── Sidebar.jsx
+│   │   │   └── Layout.jsx
+│   │   ├── Forms/
+│   │   │   ├── ItemForm.jsx
+│   │   │   ├── SupplierForm.jsx
+│   │   │   ├── CustomerForm.jsx
+│   │   │   ├── PurchaseForm.jsx
+│   │   │   ├── SaleForm.jsx
+│   │   │   └── ExpenseForm.jsx
+│   │   ├── Tables/
+│   │   │   ├── ItemsTable.jsx
+│   │   │   ├── SuppliersTable.jsx
+│   │   │   ├── CustomersTable.jsx
+│   │   │   └── TransactionsTable.jsx
+│   │   └── UI/
+│   │       ├── Card.jsx
+│   │       ├── Button.jsx
+│   │       ├── Modal.jsx
+│   │       └── PrintInvoice.jsx
+│   ├── pages/                 # Next.js pages
+│   │   ├── index.js           # Dashboard
+│   │   ├── items/
+│   │   │   ├── index.js       # List items
+│   │   │   ├── add.js         # Add item
+│   │   │   └── [id].js        # Edit item
+│   │   ├── suppliers/
+│   │   │   ├── index.js       # List suppliers
+│   │   │   ├── add.js         # Add supplier
+│   │   │   └── [id].js        # Edit/View supplier detail with history
+│   │   ├── customers/
+│   │   │   ├── index.js       # List customers
+│   │   │   ├── add.js         # Add customer
+│   │   │   └── [id].js        # Edit/View customer detail with history
+│   │   ├── purchases/
+│   │   │   ├── index.js       # List purchases
+│   │   │   ├── add.js         # Add purchase
+│   │   │   └── [id].js        # View purchase details/print invoice
+│   │   ├── sales/
+│   │   │   ├── index.js       # List sales
+│   │   │   ├── add.js         # Add sale
+│   │   │   └── [id].js        # View sale details/print invoice
+│   │   ├── transactions/
+│   │   │   ├── index.js       # List all transactions
+│   │   │   ├── payments.js    # Make payment to supplier
+│   │   │   └── receipts.js    # Receive payment from customer
+│   │   ├── expenses/
+│   │   │   ├── index.js       # List expenses
+│   │   │   └── add.js         # Add expense
+│   │   └── reports/
+│   │       ├── index.js       # Reports dashboard
+│   │       ├── balance-sheet.js
+│   │       ├── profit-loss.js
+│   │       └── custom-report.js
+│   ├── lib/                   # Utility functions
+│   │   ├── db.js              # Database client
+│   │   ├── calculations.js    # Business logic for calculations
+│   │   └── printer.js         # Thermal printer integration
+│   ├── hooks/                 # Custom React hooks
+│   │   └── useForm.js
+│   ├── styles/                # CSS styles
+│   │   ├── globals.css
+│   │   └── components.css
+│   └── context/
+│       ├── types/
+│       │   ├── actionTypes.js          # All action type constants
+│       │   └── initialState.js         # Initial state definition
+│       ├── reducers/
+│       │   ├── appReducer.js           # Main reducer (combines all)
+│       │   ├── dataReducer.js          # Items, suppliers, customers, etc.
+│       │   ├── transactionReducer.js   # Purchases, sales, payments, receipts
+│       │   └── uiReducer.js            # Loading, error, selections
+│       ├── services/
+│       │   ├── prismaService.js        # All Prisma database operations
+│       │   ├── itemService.js          # Item CRUD operations
+│       │   ├── supplierService.js      # Supplier CRUD operations
+│       │   ├── customerService.js      # Customer CRUD operations
+│       │   ├── purchaseService.js      # Purchase operations
+│       │   ├── saleService.js          # Sale operations
+│       │   └── expenseService.js       # Expense operations
+│       ├── hooks/
+│       │   ├── useStats.js             # Statistics calculations
+│       │   └── useDataFetching.js      # Data fetching logic
+│       ├── AppContext.js               # Main context provider (simplified)
+│       └── index.js                    # Export all context-related items
+├── public/                    # Static assets
+│   ├── logo.png
+│   └── icons/
+└── package.json              # Project dependencies and scripts
+
+// DATABASE SCHEMA (PRISMA)
+// schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./banana-trading.db"
+}
+
+model Item {
+  id          Int       @id @default(autoincrement())
+  name        String
+  description String?
+  unit        String    @default("Kg")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  PurchaseItem PurchaseItem[]
+  SaleItem     SaleItem[]
+}
+
+model Supplier {
+  id          Int       @id @default(autoincrement())
+  name        String
+  phone       String?
+  address     String?
+  balance     Float     @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  purchases   Purchase[]
+  payments    Payment[]
+}
+
+model Customer {
+  id          Int       @id @default(autoincrement())
+  name        String
+  phone       String?
+  address     String?
+  balance     Float     @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  sales       Sale[]
+  receipts    Receipt[]
+}
+
+model Purchase {
+  id          Int       @id @default(autoincrement())
+  supplierId  Int
+  supplier    Supplier  @relation(fields: [supplierId], references: [id])
+  totalAmount Float
+  paidAmount  Float     @default(0)
+  balance     Float     @default(0)
+  date        DateTime  @default(now())
+  items       PurchaseItem[]
+}
+
+model PurchaseItem {
+  id          Int       @id @default(autoincrement())
+  purchaseId  Int
+  purchase    Purchase  @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  itemId      Int
+  item        Item      @relation(fields: [itemId], references: [id])
+  quantity    Float
+  weightDeduction Float  @default(1.5)  // 1.5kg default deduction per bunch
+  rate        Float
+  amount      Float
+}
+
+model Sale {
+  id          Int       @id @default(autoincrement())
+  customerId  Int
+  customer    Customer  @relation(fields: [customerId], references: [id])
+  totalAmount Float
+  receivedAmount Float  @default(0)
+  balance     Float     @default(0)
+  date        DateTime  @default(now())
+  items       SaleItem[]
+}
+
+model SaleItem {
+  id          Int       @id @default(autoincrement())
+  saleId      Int
+  sale        Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  itemId      Int
+  item        Item      @relation(fields: [itemId], references: [id])
+  quantity    Float
+  rate        Float
+  amount      Float
+}
+
+model Payment {
+  id          Int       @id @default(autoincrement())
+  supplierId  Int
+  supplier    Supplier  @relation(fields: [supplierId], references: [id])
+  amount      Float
+  notes       String?
+  date        DateTime  @default(now())
+}
+
+model Receipt {
+  id          Int       @id @default(autoincrement())
+  customerId  Int
+  customer    Customer  @relation(fields: [customerId], references: [id])
+  amount      Float
+  notes       String?
+  date        DateTime  @default(now())
+}
+
+model Expense {
+  id          Int       @id @default(autoincrement())
+  category    String
+  amount      Float
+  description String?
+  date        DateTime  @default(now())
+}
+
+
+
+npx prisma migrate dev --name init

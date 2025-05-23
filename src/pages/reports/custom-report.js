@@ -1,3 +1,6 @@
+// CUSTOM REPORT
+// pages/reports/custom-report.js
+
 import { useState, useEffect } from 'react';
 import Card from '../../components/UI/Card';
 import Button from '../../components/UI/Button';
