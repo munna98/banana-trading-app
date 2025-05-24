@@ -9,7 +9,6 @@ export default function EditCustomer() {
 
   const [formData, setFormData] = useState({
     name: '',
-    email: '',
     phone: '',
     address: '',
   });
@@ -31,7 +30,6 @@ export default function EditCustomer() {
         if (response.ok && data.success) {
           setFormData({
             name: data.customer.name || '',
-            email: data.customer.email || '',
             phone: data.customer.phone || '',
             address: data.customer.address || '',
           });
@@ -54,13 +52,6 @@ export default function EditCustomer() {
 
     if (!formData.name.trim()) {
       newErrors.name = 'Customer name is required';
-    }
-
-    if (formData.email && formData.email.trim()) {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(formData.email.trim())) {
-        newErrors.email = 'Please enter a valid email address';
-      }
     }
 
     if (formData.phone && formData.phone.trim()) {
@@ -101,7 +92,6 @@ export default function EditCustomer() {
         },
         body: JSON.stringify({
           name: formData.name.trim(),
-          email: formData.email.trim() || null,
           phone: formData.phone.trim() || null,
           address: formData.address.trim() || null,
         })
@@ -228,32 +218,6 @@ export default function EditCustomer() {
                 </h3>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Email */}
-                  <div>
-                    <label htmlFor="email" className="block text-sm font-semibold text-slate-700 mb-2">
-                      Email Address
-                    </label>
-                    <input
-                      type="email"
-                      id="email"
-                      name="email"
-                      value={formData.email}
-                      onChange={handleChange}
-                      className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 bg-slate-50 focus:bg-white ${
-                        errors.email ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-slate-300'
-                      }`}
-                      placeholder="Enter email address"
-                    />
-                    {errors.email && (
-                      <p className="text-red-600 text-sm mt-1 flex items-center">
-                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        {errors.email}
-                      </p>
-                    )}
-                  </div>
-
                   {/* Phone */}
                   <div>
                     <label htmlFor="phone" className="block text-sm font-semibold text-slate-700 mb-2">

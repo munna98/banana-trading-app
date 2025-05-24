@@ -5,7 +5,7 @@ import Link from 'next/link';
 
 export default function EditSupplier() {
   const router = useRouter();
-  const { id } = router.query; // Get the supplier ID from the URL
+  const { id } = router.query;
 
   const [formData, setFormData] = useState({
     name: '',
@@ -14,12 +14,12 @@ export default function EditSupplier() {
   });
 
   const [errors, setErrors] = useState({});
-  const [isLoading, setIsLoading] = useState(true); // New state for initial data loading
+  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Effect to fetch supplier data when the component mounts or ID changes
   useEffect(() => {
-    if (!id) return; // Don't fetch if ID is not available yet
+    if (!id) return;
 
     const fetchSupplier = async () => {
       try {
@@ -27,14 +27,15 @@ export default function EditSupplier() {
         const response = await fetch(`/api/suppliers/${id}`);
         const data = await response.json();
 
-        if (response.ok && data.success) {
+        if (response.ok) {
+          // API returns supplier data directly, not wrapped in {success: true, supplier: data}
           setFormData({
-            name: data.supplier.name || '',
-            phone: data.supplier.phone || '',
-            address: data.supplier.address || '',
+            name: data.name || '',
+            phone: data.phone || '',
+            address: data.address || '',
           });
         } else {
-          throw new Error(data.message || 'Failed to fetch supplier data');
+          throw new Error(data.error || 'Failed to fetch supplier data');
         }
       } catch (error) {
         console.error('Error fetching supplier:', error);
@@ -45,7 +46,7 @@ export default function EditSupplier() {
     };
 
     fetchSupplier();
-  }, [id]); // Re-run when the ID changes
+  }, [id]);
 
   const validateForm = () => {
     const newErrors = {};
@@ -85,7 +86,7 @@ export default function EditSupplier() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`/api/suppliers/${id}`, { // Use PUT for updates
+      const response = await fetch(`/api/suppliers/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
@@ -99,10 +100,10 @@ export default function EditSupplier() {
 
       const data = await response.json();
 
-      if (response.ok && data.success) {
-        router.push('/suppliers'); // Redirect to suppliers list on success
+      if (response.ok) {
+        router.push('/suppliers');
       } else {
-        throw new Error(data.message || 'Failed to update supplier');
+        throw new Error(data.error || 'Failed to update supplier');
       }
     } catch (error) {
       console.error('Error updating supplier:', error);
