@@ -12,7 +12,7 @@ datasource db {
 
 model Item {
   id           Int            @id @default(autoincrement())
-  name         String
+  name         String         
   description  String?
   unit         String         @default("Kg")
   purchaseRate Float          @default(0.0)

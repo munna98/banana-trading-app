@@ -31,6 +31,9 @@ banana-trading-app/
 │   │       └── PrintInvoice.jsx
 │   ├── pages/                 # Next.js pages
 │   │   ├── index.js           # Dashboard
+│   │   ├── api/
+│   │   │   ├── items/
+│   │   │   │   ├── index.js   
 │   │   ├── items/
 │   │   │   ├── index.js       # List items
 │   │   │   ├── add.js         # Add item

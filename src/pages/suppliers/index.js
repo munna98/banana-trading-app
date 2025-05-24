@@ -42,7 +42,7 @@ export default function SuppliersList({ suppliers }) {
               </svg>
             </div>
             <input
-              type="text"
+              type="text" 
               placeholder="Search suppliers by name, phone, or address..."
               className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 bg-slate-50 focus:bg-white"
               value={searchTerm}

@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import Layout from '../../components/Layout/Layout';
+
 import Card from '../../components/UI/Card';
 import Button from '../../components/UI/Button';
 import Modal from '../../components/UI/Modal';
@@ -171,7 +171,6 @@ export default function AddSale({ customers, items }) {
   };
   
   return (
-    <Layout>
       <div className="add-sale-page">
         <div className="page-header">
           <h1>Add New Sale</h1>
@@ -516,7 +515,6 @@ export default function AddSale({ customers, items }) {
           }
         `}</style>
       </div>
-    </Layout>
   );
 }
 

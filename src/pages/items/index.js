@@ -1,14 +1,56 @@
+// pages/items/index.js
 import { useState } from 'react';
-import { prisma } from '../../lib/db';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 
 export default function ItemsList({ items }) {
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState('');
+  const [itemsData, setItemsData] = useState(items);
+  const [deleteModal, setDeleteModal] = useState({ show: false, item: null });
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  const filteredItems = items.filter(item =>
+  const filteredItems = itemsData.filter(item =>
     item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (item.description && item.description.toLowerCase().includes(searchTerm.toLowerCase()))
   );
+
+  const handleDeleteClick = (item) => {
+    setDeleteModal({ show: true, item });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteModal.item) return;
+    
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`/api/items/${deleteModal.item.id}`, {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Remove item from local state
+        setItemsData(prev => prev.filter(item => item.id !== deleteModal.item.id));
+        setDeleteModal({ show: false, item: null });
+        
+        // Show success message (you can replace with toast notification)
+        alert('Item deleted successfully!');
+      } else {
+        alert(data.message || 'Failed to delete item');
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      alert('An error occurred while deleting the item');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteModal({ show: false, item: null });
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
@@ -21,7 +63,7 @@ export default function ItemsList({ items }) {
               <p className="text-slate-600">Manage and track your inventory items</p>
             </div>
             <Link
-              href="/items/new"
+              href="/items/add"
               className="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white font-semibold rounded-xl hover:from-yellow-500 hover:to-yellow-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
             >
               <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -63,7 +105,7 @@ export default function ItemsList({ items }) {
                     <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Unit</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Purchase Rate</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Sales Rate</th>
-                    {/* <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Profit Margin</th> */}
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Profit Margin</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Last Updated</th>
                     <th className="px-6 py-4 text-center text-xs font-semibold text-slate-700 uppercase tracking-wider">Actions</th>
                   </tr>
@@ -93,7 +135,7 @@ export default function ItemsList({ items }) {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            Kg
+                            {item.unit}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -101,11 +143,11 @@ export default function ItemsList({ items }) {
                             ₹{purchaseRate.toFixed(2)}
                           </div>
                         </td>
-                        {/* <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-slate-900">
                             ₹{salesRate.toFixed(2)}
                           </div>
-                        </td> */}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                             profitMargin > 0 
@@ -125,17 +167,7 @@ export default function ItemsList({ items }) {
                           })}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-center">
-                          <div className="flex items-center justify-center space-x-3">
-                            <Link
-                              href={`/items/${item.id}`}
-                              className="inline-flex items-center px-3 py-1.5 bg-blue-100 text-blue-700 text-sm font-medium rounded-lg hover:bg-blue-200 transition-colors duration-150"
-                            >
-                              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                              </svg>
-                              View
-                            </Link>
+                          <div className="flex items-center justify-center space-x-2">
                             <Link
                               href={`/items/${item.id}/edit`}
                               className="inline-flex items-center px-3 py-1.5 bg-amber-100 text-amber-700 text-sm font-medium rounded-lg hover:bg-amber-200 transition-colors duration-150"
@@ -145,6 +177,15 @@ export default function ItemsList({ items }) {
                               </svg>
                               Edit
                             </Link>
+                            <button
+                              onClick={() => handleDeleteClick(item)}
+                              className="inline-flex items-center px-3 py-1.5 bg-red-100 text-red-700 text-sm font-medium rounded-lg hover:bg-red-200 transition-colors duration-150"
+                            >
+                              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                              Delete
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -165,7 +206,7 @@ export default function ItemsList({ items }) {
               {!searchTerm && (
                 <div className="mt-6">
                   <Link
-                    href="/items/new"
+                    href="/items/add"
                     className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors duration-150"
                   >
                     <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -192,12 +233,12 @@ export default function ItemsList({ items }) {
               </div>
               <div className="ml-4">
                 <h3 className="text-lg font-semibold text-blue-900">Total Items</h3>
-                <p className="text-3xl font-bold text-blue-600">{items.length}</p>
+                <p className="text-3xl font-bold text-blue-600">{itemsData.length}</p>
               </div>
             </div>
           </div>
 
-          {/* <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-6 border border-green-200">
+          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-6 border border-green-200">
             <div className="flex items-center">
               <div className="flex-shrink-0">
                 <div className="w-12 h-12 bg-green-500 rounded-xl flex items-center justify-center">
@@ -209,7 +250,7 @@ export default function ItemsList({ items }) {
               <div className="ml-4">
                 <h3 className="text-lg font-semibold text-green-900">Avg Purchase Rate</h3>
                 <p className="text-3xl font-bold text-green-600">
-                  ₹{items.length > 0 ? (items.reduce((sum, item) => sum + (item.purchaseRate || 0), 0) / items.length).toFixed(2) : '0.00'}
+                  ₹{itemsData.length > 0 ? (itemsData.reduce((sum, item) => sum + (item.purchaseRate || 0), 0) / itemsData.length).toFixed(2) : '0.00'}
                 </p>
               </div>
             </div>
@@ -227,27 +268,86 @@ export default function ItemsList({ items }) {
               <div className="ml-4">
                 <h3 className="text-lg font-semibold text-purple-900">Avg Sales Rate</h3>
                 <p className="text-3xl font-bold text-purple-600">
-                  ₹{items.length > 0 ? (items.reduce((sum, item) => sum + (item.salesRate || 0), 0) / items.length).toFixed(2) : '0.00'}
+                  ₹{itemsData.length > 0 ? (itemsData.reduce((sum, item) => sum + (item.salesRate || 0), 0) / itemsData.length).toFixed(2) : '0.00'}
                 </p>
               </div>
             </div>
-          </div> */}
+          </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteModal.show && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center mb-4">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mr-4">
+                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Confirm Delete</h3>
+                <p className="text-slate-600">This action cannot be undone.</p>
+              </div>
+            </div>
+            <p className="text-slate-700 mb-6">
+              Are you sure you want to delete "<span className="font-medium">{deleteModal.item?.name}</span>"? 
+              This will permanently remove the item from your inventory.
+            </p>
+            <div className="flex space-x-3">
+              <button
+                onClick={handleDeleteCancel}
+                className="flex-1 px-4 py-2 bg-slate-200 text-slate-800 font-medium rounded-lg hover:bg-slate-300 transition-colors duration-200"
+                disabled={isDeleting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isDeleting ? 'Deleting...' : 'Delete Item'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 export async function getServerSideProps() {
-  const items = await prisma.item.findMany({
-    orderBy: {
-      name: 'asc',
-    },
-  });
+  const { PrismaClient } = require('@prisma/client');
+  const prisma = new PrismaClient();
 
-  return {
-    props: {
-      items: JSON.parse(JSON.stringify(items)),
-    },
-  };
+  try {
+    const items = await prisma.item.findMany({
+      orderBy: {
+        updatedAt: 'desc',
+      },
+    });
+
+    const serializedItems = items.map(item => ({
+      ...item,
+      createdAt: item.createdAt.toISOString(),
+      updatedAt: item.updatedAt.toISOString(),
+    }));
+
+    return {
+      props: {
+        items: serializedItems,
+      },
+    };
+  } catch (error) {
+    console.error("Error fetching items:", error);
+    return {
+      props: {
+        items: [],
+      },
+    };
+  } finally {
+    await prisma.$disconnect();
+  }
 }
