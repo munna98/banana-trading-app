@@ -121,7 +121,7 @@ async function handlePost(req, res) {
       data: {
         name: name.trim(),
         description: description?.trim() || null,
-        unit: unit || 'Kg',
+        unit: unit || 'KG',
         purchaseRate: parseFloat(purchaseRate) || 0.0,
         salesRate: parseFloat(salesRate) || 0.0
       }
@@ -160,15 +160,15 @@ function validateItemData({ name, description, unit, purchaseRate, salesRate }) 
     errors.name = 'Item name is required';
   } else if (name.trim().length < 2) {
     errors.name = 'Item name must be at least 2 characters long';
-  } else if (name.trim().length > 100) {
-    errors.name = 'Item name must not exceed 100 characters';
+  } else if (name.trim().length > 50) {
+    errors.name = 'Item name must not exceed 50 characters';
   }
 
   if (description && description.length > 500) {
     errors.description = 'Description must not exceed 500 characters';
   }
 
-  const validUnits = ['Kg', 'Dozen', 'Bunch', 'Piece', 'Box'];
+  const validUnits = ['KG', 'PIECE', 'BOX'];
   if (unit && !validUnits.includes(unit)) {
     errors.unit = 'Please select a valid unit of measurement';
   }

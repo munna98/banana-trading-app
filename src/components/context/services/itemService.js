@@ -1,4 +1,4 @@
-// context/services/itemService.js
+// context/services/itemService.js (UPDATED)
 import { getPrismaClient, handleDatabaseError } from './prismaService.js';
 
 const prisma = getPrismaClient();
@@ -8,6 +8,12 @@ export const itemService = {
   async getAll() {
     try {
       return await prisma.item.findMany({
+        include: {
+          inventorySnapshots: {
+            orderBy: { date: 'desc' },
+            take: 1 // Get latest snapshot
+          }
+        },
         orderBy: { name: 'asc' }
       });
     } catch (error) {
@@ -38,6 +44,22 @@ export const itemService = {
     }
   },
 
+  // Update stock levels
+  async updateStock(id, quantity, operation = 'set') {
+    try {
+      const updateData = operation === 'set' 
+        ? { currentStock: quantity }
+        : { currentStock: { [operation]: quantity } };
+        
+      return await prisma.item.update({
+        where: { id },
+        data: updateData
+      });
+    } catch (error) {
+      handleDatabaseError(error, 'Updating item stock');
+    }
+  },
+
   // Delete item
   async delete(id) {
     try {
@@ -53,10 +75,31 @@ export const itemService = {
   async getById(id) {
     try {
       return await prisma.item.findUnique({
-        where: { id }
+        where: { id },
+        include: {
+          inventorySnapshots: {
+            orderBy: { date: 'desc' },
+            take: 5 // Get recent snapshots
+          }
+        }
       });
     } catch (error) {
       handleDatabaseError(error, 'Fetching item by ID');
+    }
+  },
+
+  // Get low stock items
+  async getLowStock(threshold = 10) {
+    try {
+      return await prisma.item.findMany({
+        where: {
+          currentStock: {
+            lte: threshold
+          }
+        }
+      });
+    } catch (error) {
+      handleDatabaseError(error, 'Fetching low stock items');
     }
   }
 };

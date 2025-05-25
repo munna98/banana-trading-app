@@ -8,7 +8,7 @@ export default function AddItem() {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    unit: 'Kg',
+    unit: 'KG',
     purchaseRate: '',
     salesRate: ''
   });
@@ -162,10 +162,8 @@ export default function AddItem() {
                     onChange={handleInputChange}
                     className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 bg-slate-50 focus:bg-white"
                   >
-                    <option value="Kg">Kilogram (Kg)</option>
-                    <option value="Dozen">Dozen</option>
-                    <option value="Bunch">Bunch</option>
-                    <option value="Piece">Piece</option>
+                    <option value="KG">Kilogram (Kg)</option>
+                    <option value="PIECE">Piece</option>
                     <option value="Box">Box</option>
                   </select>
                 </div>

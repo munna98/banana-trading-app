@@ -62,7 +62,6 @@ export default async function handler(req, res) {
           name,
           phone,
           address,
-          balance: parseFloat(balance)
         }
       })
 

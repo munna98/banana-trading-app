@@ -1,13 +1,25 @@
-// context/services/supplierService.js
+// context/services/supplierService.js (UPDATED - remove balance field)
 import { getPrismaClient, handleDatabaseError } from './prismaService.js';
 
 const prisma = getPrismaClient();
 
 export const supplierService = {
-  // Fetch all suppliers
+  // Fetch all suppliers with outstanding balances
   async getAll() {
     try {
       return await prisma.supplier.findMany({
+        include: {
+          purchases: {
+            where: {
+              totalAmount: {
+                gt: prisma.raw('paidAmount') // Outstanding purchases
+              }
+            }
+          },
+          _count: {
+            select: { purchases: true, payments: true }
+          }
+        },
         orderBy: { name: 'asc' }
       });
     } catch (error) {
@@ -19,10 +31,7 @@ export const supplierService = {
   async create(supplierData) {
     try {
       return await prisma.supplier.create({
-        data: {
-          ...supplierData,
-          balance: 0 // Initialize balance to 0
-        }
+        data: supplierData
       });
     } catch (error) {
       handleDatabaseError(error, 'Creating supplier');
@@ -52,30 +61,42 @@ export const supplierService = {
     }
   },
 
-  // Get supplier by ID
+  // Get supplier by ID with purchase history
   async getById(id) {
     try {
       return await prisma.supplier.findUnique({
-        where: { id }
+        where: { id },
+        include: {
+          purchases: {
+            orderBy: { date: 'desc' }
+          },
+          payments: {
+            orderBy: { date: 'desc' }
+          }
+        }
       });
     } catch (error) {
       handleDatabaseError(error, 'Fetching supplier by ID');
     }
   },
 
-  // Update supplier balance
-  async updateBalance(id, amount, operation = 'increment') {
+  // Get supplier outstanding balance
+  async getOutstandingBalance(id) {
     try {
-      return await prisma.supplier.update({
-        where: { id },
-        data: {
-          balance: {
-            [operation]: amount
-          }
+      const result = await prisma.purchase.aggregate({
+        where: { supplierId: id },
+        _sum: {
+          totalAmount: true,
+          paidAmount: true
         }
       });
+      
+      const totalAmount = result._sum.totalAmount || 0;
+      const paidAmount = result._sum.paidAmount || 0;
+      
+      return totalAmount - paidAmount;
     } catch (error) {
-      handleDatabaseError(error, 'Updating supplier balance');
+      handleDatabaseError(error, 'Calculating supplier outstanding balance');
     }
   }
 };

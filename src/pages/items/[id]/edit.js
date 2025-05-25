@@ -10,7 +10,7 @@ export default function EditItem() {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    unit: 'Kg',
+    unit: 'KG',
     purchaseRate: '',
     salesRate: ''
   });
@@ -79,7 +79,7 @@ export default function EditItem() {
       newErrors.description = 'Description must not exceed 500 characters';
     }
 
-    const validUnits = ['Kg', 'Dozen', 'Bunch', 'Piece', 'Box'];
+    const validUnits = ['KG', 'Dozen', 'Bunch', 'Piece', 'Box'];
     if (formData.unit && !validUnits.includes(formData.unit)) {
       newErrors.unit = 'Please select a valid unit of measurement';
     }
@@ -243,7 +243,7 @@ export default function EditItem() {
                     onChange={handleInputChange}
                     className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 bg-slate-50 focus:bg-white"
                   >
-                    <option value="Kg">Kilogram (Kg)</option>
+                    <option value="KG">Kilogram (KG)</option>
                     <option value="Dozen">Dozen</option>
                     <option value="Bunch">Bunch</option>
                     <option value="Piece">Piece</option>
@@ -373,7 +373,7 @@ export default function EditItem() {
                 <h3 className="text-lg font-semibold text-yellow-900">About Item Units</h3>
               </div>
               <p className="text-sm text-yellow-800 mb-3">
-                For banana inventory, typically use <strong>Kg</strong> for weight-based tracking.
+                For banana inventory, typically use <strong>KG</strong> for weight-based tracking.
                 For bunch-based tracking, you can use <strong>Dozen</strong> or <strong>Bunch</strong>.
               </p>
             </div>

@@ -113,7 +113,7 @@ async function handlePut(req, res, id) {
       data: {
         name: name.trim(),
         description: description?.trim() || null,
-        unit: unit || 'Kg',
+        unit: unit || 'KG',
         purchaseRate: parseFloat(purchaseRate) || 0.0,
         salesRate: parseFloat(salesRate) || 0.0
       }
@@ -151,35 +151,88 @@ async function handlePut(req, res, id) {
 // DELETE /api/items/[id] - Delete an item by ID
 async function handleDelete(req, res, id) {
   try {
-    // Check if item exists and has related records
+    console.log(`Attempting to delete item with ID: ${id}`);
+
+    // First, check if item exists
     const existingItem = await prisma.item.findUnique({
-      where: { id: id },
-      include: {
-        PurchaseItem: true, // Assuming this correctly links to purchases
-        SaleItem: true      // Assuming this correctly links to sales
-      }
+      where: { id: id }
     });
 
     if (!existingItem) {
+      console.log(`Item with ID ${id} not found`);
       return res.status(404).json({
         success: false,
         message: 'Item not found'
       });
     }
 
-    // Check if item has related purchase or sale records
-    if (existingItem.PurchaseItem.length > 0 || existingItem.SaleItem.length > 0) {
+    console.log(`Item found: ${existingItem.name}`);
+
+    // Method 1: Try to check for related records using common relation names
+    // You might need to adjust these based on your actual Prisma schema
+    let hasRelatedRecords = false;
+    let relatedRecordsMessage = '';
+
+    try {
+      // Using the correct relation names from your schema
+      const itemWithRelations = await prisma.item.findUnique({
+        where: { id: id },
+        include: {
+          purchaseItems: true,    // Matches your schema
+          saleItems: true,        // Matches your schema
+        }
+      });
+
+      // Check if any relations exist
+      if (itemWithRelations) {
+        const purchaseCount = itemWithRelations.purchaseItems?.length || 0;
+        const saleCount = itemWithRelations.saleItems?.length || 0;
+        
+        if (purchaseCount > 0 || saleCount > 0) {
+          hasRelatedRecords = true;
+          relatedRecordsMessage = `Item has ${purchaseCount} purchase record(s) and ${saleCount} sale record(s)`;
+        }
+      }
+    } catch (includeError) {
+      console.log('Include relations failed, trying alternative approach:', includeError.message);
+      
+      // Method 2: Alternative approach - try direct queries if relations don't work
+      try {
+        // Try to find related records directly
+        const purchaseCount = await prisma.purchaseItem.count({
+          where: { itemId: id }
+        });
+        
+        const saleCount = await prisma.saleItem.count({
+          where: { itemId: id }
+        });
+
+        if (purchaseCount > 0 || saleCount > 0) {
+          hasRelatedRecords = true;
+          relatedRecordsMessage = `Item has ${purchaseCount} purchase record(s) and ${saleCount} sale record(s)`;
+        }
+      } catch (countError) {
+        console.log('Direct count queries failed, proceeding with delete attempt:', countError.message);
+        // If we can't check relations, we'll let the delete attempt handle any foreign key constraints
+      }
+    }
+
+    if (hasRelatedRecords) {
+      console.log(`Cannot delete item: ${relatedRecordsMessage}`);
       return res.status(409).json({
         success: false,
-        message: 'Cannot delete item. It has associated purchase or sale records.'
+        message: 'Cannot delete item. It has associated purchase or sale records.',
+        details: relatedRecordsMessage
       });
     }
 
-    // Delete the item
+    // Attempt to delete the item
+    console.log(`Deleting item with ID: ${id}`);
     const deletedItem = await prisma.item.delete({
       where: { id: id }
     });
 
+    console.log(`Successfully deleted item: ${deletedItem.name}`);
     return res.status(200).json({
       success: true,
       message: 'Item deleted successfully',
@@ -195,17 +248,19 @@ async function handleDelete(req, res, id) {
         message: 'Item not found'
       });
     }
-    // P2003: Foreign key constraint failed - handled by explicit check above
+    
+    // P2003: Foreign key constraint failed
     if (error.code === 'P2003') {
-        return res.status(409).json({
-          success: false,
-          message: 'Cannot delete item due to related records (e.g., purchases, sales).'
-        });
-      }
+      return res.status(409).json({
+        success: false,
+        message: 'Cannot delete item due to related records (purchases, sales, etc.)'
+      });
+    }
 
     return res.status(500).json({
       success: false,
-      message: 'Failed to delete item'
+      message: 'Failed to delete item',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
   }
 }
@@ -229,7 +284,7 @@ function validateItemData({ name, description, unit, purchaseRate, salesRate }) 
   }
 
   // Unit validation
-  const validUnits = ['Kg', 'Dozen', 'Bunch', 'Piece', 'Box'];
+  const validUnits = ['KG', 'PIECE', 'BOX'];
   if (unit && !validUnits.includes(unit)) {
     errors.unit = 'Please select a valid unit of measurement';
   }

@@ -1,9 +1,23 @@
 // context/AppContext.js
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import { appReducer } from './reducers/appReducer.js';
-import { initialState } from './types/initialState.js';
+import { combineReducers } from 'redux'; // Import combineReducers
+import { initialState } from './initialState.js'; // Corrected path to initialState.js
 import { useDataFetching } from './hooks/useDataFetching.js';
 import { useStats } from './hooks/useStats.js';
+import { ActionTypes } from './types/actionTypes.js'; // Make sure ActionTypes is imported for SET_ERROR
+
+// Import your individual reducers
+import { uiReducer } from './reducers/uiReducer.js';
+import { dataReducer } from './reducers/dataReducer.js';
+import { transactionReducer } from './reducers/transactionReducer.js';
+
+// Combine the reducers into a single root reducer
+const rootReducer = combineReducers({
+  ui: uiReducer,
+  data: dataReducer,
+  transactions: transactionReducer,
+  // Add other reducers here if you create more (e.g., authReducer)
+});
 
 // Create the context
 const AppContext = createContext();
@@ -19,14 +33,15 @@ export function useAppContext() {
 
 // AppProvider component
 export function AppProvider({ children }) {
-  const [state, dispatch] = useReducer(appReducer, initialState);
-  
+  // Use the combined rootReducer with the structured initialState
+  const [state, dispatch] = useReducer(rootReducer, initialState);
+
   // Get data fetching functions
   const dataFetching = useDataFetching(dispatch);
-  
-  // Get calculated stats
-  const stats = useStats(state);
-  
+
+  // Get calculated stats - Pass the ENTIRE state object
+  const stats = useStats(state); // <--- This is the crucial change!
+
   // Initial data load
   useEffect(() => {
     const loadInitialData = async () => {
@@ -34,41 +49,56 @@ export function AppProvider({ children }) {
         await dataFetching.fetchAllData();
       } catch (error) {
         console.error('Failed to load initial data:', error);
+        // Dispatch an error action to update UI state
+        dispatch({ type: ActionTypes.SET_ERROR, payload: error.message || 'An error occurred' });
       }
     };
-    
+
     loadInitialData();
-  }, []);
+  }, [dataFetching, dispatch]); // Added dispatch and dataFetching to dependency array
 
   // Context value
   const contextValue = {
     // State
-    state,
+    state, // The entire combined state object
     dispatch,
-    
-    // Stats
+
+    // Stats (calculated from useStats hook)
     stats,
-    
+
     // Data fetching functions
-    ...dataFetching,
-    
-    // Helper functions
-    isLoading: (key) => state.loading[key] || false,
-    hasError: () => !!state.error,
-    getError: () => state.error,
-    
-    // Quick accessors
-    items: state.items,
-    suppliers: state.suppliers,
-    customers: state.customers,
-    purchases: state.purchases,
-    sales: state.sales,
-    expenses: state.expenses,
-    
-    // UI state
-    selectedItems: state.selectedItems,
-    selectedSuppliers: state.selectedSuppliers,
-    selectedCustomers: state.selectedCustomers
+    ...dataFetching, // This spread assumes useDataFetching returns an object of functions
+
+    // Helper functions - now accessing 'ui' slice for loading/error
+    isLoading: () => state.ui.loading, // Assuming a single global loading flag in ui.loading
+    hasError: () => !!state.ui.error,
+    getError: () => state.ui.error,
+
+    // Quick accessors - now accessing through nested state structure
+    // Core Trading Data
+    items: state.data.items,
+    suppliers: state.data.suppliers,
+    customers: state.data.customers,
+    expenses: state.data.expenses, // If expense refers to categories/types
+
+    // Transactional Data
+    purchases: state.transactions.purchases,
+    sales: state.transactions.sales,
+    payments: state.transactions.payments,
+    receipts: state.transactions.receipts,
+    transactions: state.transactions.transactions, // General accounting transactions
+
+    // Accounting & Inventory Data
+    accounts: state.data.accounts,
+    expenseCategories: state.data.expenseCategories,
+    cashBookEntries: state.data.cashBookEntries,
+    bankTransactions: state.data.bankTransactions,
+    reportingPeriods: state.data.reportingPeriods,
+    inventorySnapshots: state.data.inventorySnapshots,
+
+    // Selected Entities (from data slice)
+    selectedSupplier: state.data.selectedSupplier,
+    selectedCustomer: state.data.selectedCustomer,
   };
 
   return (

@@ -1,10 +1,9 @@
 // pages/index.js
 import { useState, useEffect } from 'react';
 import { prisma } from '../lib/db';
-import Card from '../components/UI/Card';
 import Link from 'next/link';
 
-export default function Dashboard({ summary, recentTransactions }) {
+export default function Dashboard({ summary, recentTransactions, cashBook }) {
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -68,18 +67,32 @@ export default function Dashboard({ summary, recentTransactions }) {
       description: 'Collect customer payment'
     },
     {
-      title: 'Add Expense',
-      href: '/expenses/add',
-      icon: '📋',
-      color: 'bg-gray-500 hover:bg-gray-600',
-      description: 'Record business expense'
+      title: 'Cash Book',
+      href: '/cash-book',
+      icon: '💸',
+      color: 'bg-teal-500 hover:bg-teal-600',
+      description: 'Manage cash transactions'
     },
     {
-      title: 'View Reports',
-      href: '/reports',
+      title: 'Bank Reconciliation',
+      href: '/bank/reconciliation',
+      icon: '🏦',
+      color: 'bg-cyan-500 hover:bg-cyan-600',
+      description: 'Reconcile bank statements'
+    },
+    {
+      title: 'Expense Categories',
+      href: '/expenses/categories',
+      icon: '📋',
+      color: 'bg-gray-500 hover:bg-gray-600',
+      description: 'Manage expense categories'
+    },
+    {
+      title: 'Financial Reports',
+      href: '/reports/financial',
       icon: '📊',
       color: 'bg-indigo-500 hover:bg-indigo-600',
-      description: 'Generate business reports'
+      description: 'View P&L and Balance Sheet'
     }
   ];
 
@@ -118,7 +131,9 @@ export default function Dashboard({ summary, recentTransactions }) {
               <div className="text-3xl font-bold text-blue-600 mb-1">
                 {summary.itemCount}
               </div>
-              <div className="text-sm text-gray-500">Banana Types</div>
+              <div className="text-sm text-gray-500">
+                Stock Value: {formatCurrency(summary.totalStockValue)}
+              </div>
             </div>
             <div className="text-4xl">🍌</div>
           </div>
@@ -165,28 +180,65 @@ export default function Dashboard({ summary, recentTransactions }) {
           </Link>
         </div>
 
-        {/* Today's Activity Card */}
+        {/* Cash Position Card */}
         <div className="bg-white rounded-lg shadow-lg p-6 border-l-4 border-purple-500 hover:shadow-xl transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-gray-700 mb-2">Today's Activity</h3>
+              <h3 className="text-lg font-semibold text-gray-700 mb-2">Cash Position</h3>
+              <div className="text-3xl font-bold text-purple-600 mb-1">
+                {formatCurrency(cashBook.closingCash)}
+              </div>
               <div className="space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Purchases:</span>
-                  <span className="font-semibold text-blue-600">{summary.todayPurchases}</span>
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-600">In:</span>
+                  <span className="text-green-600 font-medium">{formatCurrency(cashBook.cashIn)}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Sales:</span>
-                  <span className="font-semibold text-green-600">{summary.todaySales}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Expenses:</span>
-                  <span className="font-semibold text-red-600">{formatCurrency(summary.todayExpenses)}</span>
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-600">Out:</span>
+                  <span className="text-red-600 font-medium">{formatCurrency(cashBook.cashOut)}</span>
                 </div>
               </div>
             </div>
-            <div className="text-4xl">📈</div>
+            <div className="text-4xl">💸</div>
           </div>
+          <Link href="/cash-book" className="inline-block mt-4 text-purple-600 hover:text-purple-800 font-medium">
+            View Cash Book →
+          </Link>
+        </div>
+      </div>
+
+      {/* Business Health Indicators */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="bg-gradient-to-r from-green-400 to-green-600 rounded-lg p-6 text-white">
+          <h3 className="text-lg font-semibold mb-2">Net Position</h3>
+          <div className="text-2xl font-bold mb-1">
+            {formatCurrency(summary.totalCustomerBalance - summary.totalSupplierBalance)}
+          </div>
+          <p className="text-sm opacity-90">Receivables - Payables</p>
+        </div>
+
+        <div className="bg-gradient-to-r from-blue-400 to-blue-600 rounded-lg p-6 text-white">
+          <h3 className="text-lg font-semibold mb-2">Today's Activity</h3>
+          <div className="text-2xl font-bold mb-1">
+            {summary.todayPurchases + summary.todaySales}
+          </div>
+          <p className="text-sm opacity-90">Total Transactions</p>
+        </div>
+
+        <div className="bg-gradient-to-r from-purple-400 to-purple-600 rounded-lg p-6 text-white">
+          <h3 className="text-lg font-semibold mb-2">Payment Methods</h3>
+          <div className="text-2xl font-bold mb-1">
+            {summary.paymentMethodStats.total}
+          </div>
+          <p className="text-sm opacity-90">Active Methods</p>
+        </div>
+
+        <div className="bg-gradient-to-r from-teal-400 to-teal-600 rounded-lg p-6 text-white">
+          <h3 className="text-lg font-semibold mb-2">Bank Status</h3>
+          <div className="text-2xl font-bold mb-1">
+            {summary.bankReconciliation.unreconciled}
+          </div>
+          <p className="text-sm opacity-90">Unreconciled Items</p>
         </div>
       </div>
 
@@ -196,7 +248,7 @@ export default function Dashboard({ summary, recentTransactions }) {
           <span className="mr-3">⚡</span>
           Quick Actions
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {quickActions.map((action, index) => (
             <Link key={index} href={action.href}>
               <div className={`${action.color} text-white rounded-lg p-4 cursor-pointer transform hover:scale-105 transition-all duration-200 shadow-md hover:shadow-lg`}>
@@ -233,6 +285,7 @@ export default function Dashboard({ summary, recentTransactions }) {
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Date</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Type</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Party</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Method</th>
                   <th className="text-right py-3 px-4 font-semibold text-gray-700">Amount</th>
                   <th className="text-center py-3 px-4 font-semibold text-gray-700">Status</th>
                 </tr>
@@ -245,15 +298,24 @@ export default function Dashboard({ summary, recentTransactions }) {
                     </td>
                     <td className="py-3 px-4">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        transaction.type === 'Purchase' ? 'bg-blue-100 text-blue-800' :
-                        transaction.type === 'Sale' ? 'bg-green-100 text-green-800' :
+                        transaction.type === 'PURCHASE' ? 'bg-blue-100 text-blue-800' :
+                        transaction.type === 'SALE' ? 'bg-green-100 text-green-800' :
+                        transaction.type === 'PAYMENT' ? 'bg-orange-100 text-orange-800' :
+                        transaction.type === 'RECEIPT' ? 'bg-purple-100 text-purple-800' :
                         'bg-gray-100 text-gray-800'
                       }`}>
-                        {transaction.type}
+                        {transaction.type.replace('_', ' ')}
                       </span>
                     </td>
                     <td className="py-3 px-4 text-sm text-gray-700">
-                      {transaction.party}
+                      {transaction.party || 'N/A'}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-gray-600">
+                      {transaction.paymentMethod && (
+                        <span className="inline-flex px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded">
+                          {transaction.paymentMethod.replace('_', ' ')}
+                        </span>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-sm font-semibold text-right">
                       {formatCurrency(transaction.amount)}
@@ -279,30 +341,21 @@ export default function Dashboard({ summary, recentTransactions }) {
         )}
       </div>
 
-      {/* Business Health Indicators */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-gradient-to-r from-green-400 to-green-600 rounded-lg p-6 text-white">
-          <h3 className="text-lg font-semibold mb-2">Cash Flow</h3>
-          <div className="text-2xl font-bold mb-1">
-            {formatCurrency(summary.totalCustomerBalance - summary.totalSupplierBalance)}
-          </div>
-          <p className="text-sm opacity-90">Net Receivable</p>
-        </div>
-
-        <div className="bg-gradient-to-r from-blue-400 to-blue-600 rounded-lg p-6 text-white">
-          <h3 className="text-lg font-semibold mb-2">Daily Activity</h3>
-          <div className="text-2xl font-bold mb-1">
-            {summary.todayPurchases + summary.todaySales}
-          </div>
-          <p className="text-sm opacity-90">Total Transactions</p>
-        </div>
-
-        <div className="bg-gradient-to-r from-purple-400 to-purple-600 rounded-lg p-6 text-white">
-          <h3 className="text-lg font-semibold mb-2">Business Growth</h3>
-          <div className="text-2xl font-bold mb-1">
-            {summary.customerCount + summary.supplierCount}
-          </div>
-          <p className="text-sm opacity-90">Total Partners</p>
+      {/* Payment Method Distribution */}
+      <div className="bg-white rounded-lg shadow-lg p-6">
+        <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
+          <span className="mr-3">💳</span>
+          Payment Method Distribution
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          {Object.entries(summary.paymentMethodStats.breakdown).map(([method, count]) => (
+            <div key={method} className="text-center">
+              <div className="text-2xl font-bold text-gray-700">{count}</div>
+              <div className="text-sm text-gray-500 capitalize">
+                {method.replace('_', ' ').toLowerCase()}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -313,93 +366,187 @@ export async function getServerSideProps() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const [
-    itemCount,
-    supplierCount,
-    customerCount,
-    suppliers,
-    customers,
-    todayPurchases,
-    todaySales,
-    todayExpensesData,
-    recentPurchases,
-    recentSales
-  ] = await Promise.all([
-    prisma.item.count(),
-    prisma.supplier.count(),
-    prisma.customer.count(),
-    prisma.supplier.findMany(),
-    prisma.customer.findMany(),
-    prisma.purchase.count({
-      where: {
-        date: {
-          gte: today
+  try {
+    const [
+      itemCount,
+      supplierCount,
+      customerCount,
+      totalStockValue,
+      todayPurchases,
+      todaySales,
+      recentTransactions,
+      cashBookToday,
+      paymentMethods,
+      bankTransactions
+    ] = await Promise.all([
+      // Basic counts
+      prisma.item.count(),
+      prisma.supplier.count(),
+      prisma.customer.count(),
+      
+      // Calculate total stock value
+      prisma.item.aggregate({
+        _sum: {
+          currentStock: true
         }
-      }
-    }),
-    prisma.sale.count({
-      where: {
-        date: {
-          gte: today
+      }),
+      
+      // Today's activity
+      prisma.purchase.count({
+        where: { date: { gte: today } }
+      }),
+      prisma.sale.count({
+        where: { date: { gte: today } }
+      }),
+      
+      // Recent transactions from the Transaction table
+      prisma.transaction.findMany({
+        take: 10,
+        orderBy: { date: 'desc' },
+        include: {
+          purchase: { include: { supplier: true } },
+          sale: { include: { customer: true } },
+          payment: { include: { supplier: true } },
+          receipt: { include: { customer: true } }
         }
-      }
-    }),
-    prisma.expense.findMany({
-      where: {
-        date: {
-          gte: today
+      }),
+      
+      // Today's cash book entry
+      prisma.cashBook.findUnique({
+        where: { date: today }
+      }),
+      
+      // Payment method statistics
+      prisma.payment.groupBy({
+        by: ['paymentMethod'],
+        _count: true
+      }),
+      
+      // Bank reconciliation status
+      prisma.bankTransaction.count({
+        where: { isReconciled: false }
+      })
+    ]);
+
+    // Calculate balances (since they're no longer stored)
+    const [supplierBalances, customerBalances] = await Promise.all([
+      // Supplier balances calculation
+      prisma.supplier.findMany({
+        include: {
+          purchases: true,
+          payments: true
         }
+      }),
+      
+      // Customer balances calculation
+      prisma.customer.findMany({
+        include: {
+          sales: true,
+          receipts: true
+        }
+      })
+    ]);
+
+    const totalSupplierBalance = supplierBalances.reduce((total, supplier) => {
+      const purchaseTotal = supplier.purchases.reduce((sum, purchase) => sum + purchase.totalAmount, 0);
+      const paymentTotal = supplier.payments.reduce((sum, payment) => sum + payment.amount, 0);
+      return total + (purchaseTotal - paymentTotal);
+    }, 0);
+
+    const totalCustomerBalance = customerBalances.reduce((total, customer) => {
+      const saleTotal = customer.sales.reduce((sum, sale) => sum + sale.totalAmount, 0);
+      const receiptTotal = customer.receipts.reduce((sum, receipt) => sum + receipt.amount, 0);
+      return total + (saleTotal - receiptTotal);
+    }, 0);
+
+    // Format recent transactions
+    const formattedTransactions = recentTransactions.map(transaction => {
+      let party = null;
+      let balance = 0;
+      let paymentMethod = null;
+
+      if (transaction.purchase) {
+        party = transaction.purchase.supplier.name;
+        balance = transaction.purchase.totalAmount - transaction.purchase.paidAmount;
+      } else if (transaction.sale) {
+        party = transaction.sale.customer.name;
+        balance = transaction.sale.totalAmount - transaction.sale.receivedAmount;
+      } else if (transaction.payment) {
+        party = transaction.payment.supplier?.name;
+        paymentMethod = transaction.payment.paymentMethod;
+      } else if (transaction.receipt) {
+        party = transaction.receipt.customer?.name;
+        paymentMethod = transaction.receipt.paymentMethod;
       }
-    }),
-    // Recent purchases
-    prisma.purchase.findMany({
-      take: 3,
-      orderBy: { date: 'desc' },
-      include: { supplier: true }
-    }),
-    // Recent sales
-    prisma.sale.findMany({
-      take: 3,
-      orderBy: { date: 'desc' },
-      include: { customer: true }
-    })
-  ]);
 
-  const totalSupplierBalance = suppliers.reduce((sum, supplier) => sum + supplier.balance, 0);
-  const totalCustomerBalance = customers.reduce((sum, customer) => sum + customer.balance, 0);
-  const todayExpenses = todayExpensesData.reduce((sum, expense) => sum + expense.amount, 0);
+      return {
+        date: transaction.date,
+        type: transaction.type,
+        party,
+        amount: transaction.amount,
+        balance,
+        paymentMethod
+      };
+    });
 
-  // Combine and format recent transactions
-  const recentTransactions = [
-    ...recentPurchases.map(purchase => ({
-      date: purchase.date,
-      type: 'Purchase',
-      party: purchase.supplier.name,
-      amount: purchase.totalAmount,
-      balance: purchase.balance
-    })),
-    ...recentSales.map(sale => ({
-      date: sale.date,
-      type: 'Sale',
-      party: sale.customer.name,
-      amount: sale.totalAmount,
-      balance: sale.balance
-    }))
-  ].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 5);
+    // Payment method breakdown
+    const paymentMethodBreakdown = paymentMethods.reduce((acc, method) => {
+      acc[method.paymentMethod] = method._count;
+      return acc;
+    }, {});
 
-  return {
-    props: {
-      summary: {
-        itemCount,
-        supplierCount,
-        customerCount,
-        totalSupplierBalance,
-        totalCustomerBalance,
-        todayPurchases,
-        todaySales,
-        todayExpenses
-      },
-      recentTransactions
-    }
-  };
+    // Default cash book if none exists for today
+    const defaultCashBook = {
+      openingCash: 0,
+      cashIn: 0,
+      cashOut: 0,
+      closingCash: 0
+    };
+
+    return {
+      props: {
+        summary: {
+          itemCount,
+          supplierCount,
+          customerCount,
+          totalStockValue: totalStockValue._sum.currentStock || 0,
+          totalSupplierBalance,
+          totalCustomerBalance,
+          todayPurchases,
+          todaySales,
+          paymentMethodStats: {
+            total: Object.keys(paymentMethodBreakdown).length,
+            breakdown: paymentMethodBreakdown
+          },
+          bankReconciliation: {
+            unreconciled: bankTransactions
+          }
+        },
+        recentTransactions: formattedTransactions,
+        cashBook: cashBookToday || defaultCashBook
+      }
+    };
+  } catch (error) {
+    console.error('Error fetching dashboard data:', error);
+    
+    // Return default data in case of error
+    return {
+      props: {
+        summary: {
+          itemCount: 0,
+          supplierCount: 0,
+          customerCount: 0,
+          totalStockValue: 0,
+          totalSupplierBalance: 0,
+          totalCustomerBalance: 0,
+          todayPurchases: 0,
+          todaySales: 0,
+          paymentMethodStats: { total: 0, breakdown: {} },
+          bankReconciliation: { unreconciled: 0 }
+        },
+        recentTransactions: [],
+        cashBook: { openingCash: 0, cashIn: 0, cashOut: 0, closingCash: 0 }
+      }
+    };
+  }
 }

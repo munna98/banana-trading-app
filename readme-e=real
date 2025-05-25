@@ -34,6 +34,14 @@ banana-trading-app/
 │   │   ├── api/
 │   │   │   ├── items/
 │   │   │   │   ├── index.js   
+│   │   │   │   └── [id].js
+│   │   │   ├── suppliers/
+│   │   │   │   ├── index.js       
+│   │   │   │   └── [id].js
+│   │   │   ├── customers/
+│   │   │   │   ├── index.js      
+│   │   │   │   └── [id].js 
+│   │   │   
 │   │   ├── items/
 │   │   │   ├── index.js       # List items
 │   │   │   ├── add.js         # Add item

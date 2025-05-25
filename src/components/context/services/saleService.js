@@ -1,5 +1,6 @@
-// context/services/saleService.js
+// context/services/saleService.js (UPDATED - remove balance field from schema)
 import { getPrismaClient, handleDatabaseError } from './prismaService.js';
+import { transactionService } from './transactionService.js';
 
 const prisma = getPrismaClient();
 
@@ -14,7 +15,9 @@ export const saleService = {
             include: {
               item: true
             }
-          }
+          },
+          receipts: true,
+          transaction: true
         },
         orderBy: { date: 'desc' }
       });
@@ -23,10 +26,9 @@ export const saleService = {
     }
   },
 
-  // Create new sale
+  // Create new sale with accounting entries
   async create(saleData) {
     try {
-      // Start a transaction
       return await prisma.$transaction(async (tx) => {
         // Create the sale with items
         const newSale = await tx.sale.create({
@@ -34,7 +36,7 @@ export const saleService = {
             customerId: saleData.customerId,
             totalAmount: saleData.totalAmount,
             receivedAmount: saleData.receivedAmount || 0,
-            balance: saleData.totalAmount - (saleData.receivedAmount || 0),
+            invoiceNo: saleData.invoiceNo,
             items: {
               create: saleData.items.map(item => ({
                 itemId: item.itemId,
@@ -54,17 +56,20 @@ export const saleService = {
           }
         });
 
-        // Update customer balance
-        if (newSale.balance > 0) {
-          await tx.customer.update({
-            where: { id: saleData.customerId },
+        // Update item stocks
+        for (const item of saleData.items) {
+          await tx.item.update({
+            where: { id: item.itemId },
             data: {
-              balance: {
-                increment: newSale.balance
+              currentStock: {
+                decrement: item.quantity
               }
             }
           });
         }
+
+        // Create accounting transaction
+        await transactionService.createSaleTransaction(newSale, tx);
 
         return newSale;
       });
@@ -100,29 +105,34 @@ export const saleService = {
         // Get sale details first
         const sale = await tx.sale.findUnique({
           where: { id },
-          include: { customer: true }
+          include: { 
+            customer: true,
+            items: {
+              include: { item: true }
+            }
+          }
         });
 
         if (!sale) {
           throw new Error('Sale not found');
         }
 
-        // Delete the sale (items will be deleted by cascade)
-        await tx.sale.delete({
-          where: { id }
-        });
-
-        // Update customer balance (reduce by sale balance)
-        if (sale.balance > 0) {
-          await tx.customer.update({
-            where: { id: sale.customerId },
+        // Reverse stock updates
+        for (const saleItem of sale.items) {
+          await tx.item.update({
+            where: { id: saleItem.itemId },
             data: {
-              balance: {
-                decrement: sale.balance
+              currentStock: {
+                increment: saleItem.quantity
               }
             }
           });
         }
+
+        // Delete the sale (items will be deleted by cascade)
+        await tx.sale.delete({
+          where: { id }
+        });
 
         return sale;
       });
@@ -142,7 +152,9 @@ export const saleService = {
             include: {
               item: true
             }
-          }
+          },
+          receipts: true,
+          transaction: true
         }
       });
     } catch (error) {
@@ -161,12 +173,32 @@ export const saleService = {
             include: {
               item: true
             }
-          }
+          },
+          receipts: true
         },
         orderBy: { date: 'desc' }
       });
     } catch (error) {
       handleDatabaseError(error, 'Fetching sales by customer');
+    }
+  },
+
+  // Get outstanding sales
+  async getOutstanding() {
+    try {
+      return await prisma.sale.findMany({
+        where: {
+          totalAmount: {
+            gt: prisma.raw('receivedAmount')
+          }
+        },
+        include: {
+          customer: true
+        },
+        orderBy: { date: 'desc' }
+      });
+    } catch (error) {
+      handleDatabaseError(error, 'Fetching outstanding sales');
     }
   }
 };
