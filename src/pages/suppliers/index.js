@@ -62,13 +62,17 @@ export default function SuppliersList({ suppliers }) {
                     <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Name</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Phone</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Address</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Total Purchases</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Total Paid</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Balance</th>
                     <th className="px-6 py-4 text-center text-xs font-semibold text-slate-700 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-slate-200">
                   {filteredSuppliers.map((supplier, index) => {
-                    const balance = supplier.balance || 0;
+                    const totalPurchases = supplier.totalPurchases || 0;
+                    const totalPaid = supplier.totalPaid || 0;
+                    const balance = totalPurchases - totalPaid;
                     
                     return (
                       <tr key={supplier.id} className={`hover:bg-slate-50 transition-colors duration-150 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-25'}`}>
@@ -92,6 +96,16 @@ export default function SuppliersList({ suppliers }) {
                             {supplier.address || (
                               <span className="text-slate-400 italic">No address</span>
                             )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-slate-900">
+                            ₹{totalPurchases.toFixed(2)}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-green-600">
+                            ₹{totalPaid.toFixed(2)}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -172,7 +186,7 @@ export default function SuppliersList({ suppliers }) {
         </div>
 
         {/* Summary Section */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-6 border border-blue-200">
             <div className="flex items-center">
               <div className="flex-shrink-0">
@@ -189,6 +203,24 @@ export default function SuppliersList({ suppliers }) {
             </div>
           </div>
 
+          <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-6 border border-purple-200">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <div className="w-12 h-12 bg-purple-500 rounded-xl flex items-center justify-center">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                  </svg>
+                </div>
+              </div>
+              <div className="ml-4">
+                <h3 className="text-lg font-semibold text-purple-900">Total Purchases</h3>
+                <p className="text-3xl font-bold text-purple-600">
+                  ₹{suppliers.reduce((sum, supplier) => sum + (supplier.totalPurchases || 0), 0).toFixed(2)}
+                </p>
+              </div>
+            </div>
+          </div>
+
           <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-2xl p-6 border border-red-200">
             <div className="flex items-center">
               <div className="flex-shrink-0">
@@ -201,7 +233,10 @@ export default function SuppliersList({ suppliers }) {
               <div className="ml-4">
                 <h3 className="text-lg font-semibold text-red-900">Total Payable</h3>
                 <p className="text-3xl font-bold text-red-600">
-                  ₹{suppliers.reduce((sum, supplier) => sum + Math.max(0, supplier.balance || 0), 0).toFixed(2)}
+                  ₹{suppliers.reduce((sum, supplier) => {
+                    const balance = (supplier.totalPurchases || 0) - (supplier.totalPaid || 0);
+                    return sum + Math.max(0, balance);
+                  }, 0).toFixed(2)}
                 </p>
               </div>
             </div>
@@ -219,7 +254,10 @@ export default function SuppliersList({ suppliers }) {
               <div className="ml-4">
                 <h3 className="text-lg font-semibold text-green-900">Total Advance</h3>
                 <p className="text-3xl font-bold text-green-600">
-                  ₹{Math.abs(suppliers.reduce((sum, supplier) => sum + Math.min(0, supplier.balance || 0), 0)).toFixed(2)}
+                  ₹{Math.abs(suppliers.reduce((sum, supplier) => {
+                    const balance = (supplier.totalPurchases || 0) - (supplier.totalPaid || 0);
+                    return sum + Math.min(0, balance);
+                  }, 0)).toFixed(2)}
                 </p>
               </div>
             </div>
@@ -232,14 +270,43 @@ export default function SuppliersList({ suppliers }) {
 
 export async function getServerSideProps() {
   const suppliers = await prisma.supplier.findMany({
+    include: {
+      purchases: {
+        select: {
+          totalAmount: true,
+        },
+      },
+      payments: {
+        select: {
+          amount: true,
+        },
+      },
+    },
     orderBy: {
       name: 'asc',
     },
   });
 
+  // Calculate totals for each supplier
+  const suppliersWithTotals = suppliers.map(supplier => {
+    const totalPurchases = supplier.purchases.reduce((sum, purchase) => sum + purchase.totalAmount, 0);
+    const totalPaid = supplier.payments.reduce((sum, payment) => sum + payment.amount, 0);
+    
+    return {
+      id: supplier.id,
+      name: supplier.name,
+      phone: supplier.phone,
+      address: supplier.address,
+      createdAt: supplier.createdAt,
+      updatedAt: supplier.updatedAt,
+      totalPurchases,
+      totalPaid,
+    };
+  });
+
   return {
     props: {
-      suppliers: JSON.parse(JSON.stringify(suppliers)),
+      suppliers: JSON.parse(JSON.stringify(suppliersWithTotals)),
     },
   };
 }

@@ -1,4 +1,4 @@
-// MAKE PAYMENT PAGE
+// MAKE PAYMENT PAGE - Updated for new schema
 // pages/transactions/payments.js
 
 import { useState, useEffect } from 'react';
@@ -7,78 +7,161 @@ import Link from 'next/link';
 
 export default function MakePayment() {
   const router = useRouter();
-  const { supplierId } = router.query;
-  
+  const { supplierId, purchaseId } = router.query;
+
   const [suppliers, setSuppliers] = useState([]);
+  const [purchases, setPurchases] = useState([]);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     supplierId: supplierId || '',
+    purchaseId: purchaseId || '', // New: Optional purchase link
+    paymentMethod: 'CASH', // New: Payment method
     amount: '',
+    reference: '', // New: Reference number/ID
     notes: '',
     date: new Date().toISOString().split('T')[0]
   });
   const [selectedSupplierBalance, setSelectedSupplierBalance] = useState(0);
-  
+  const [selectedPurchaseBalance, setSelectedPurchaseBalance] = useState(0);
+
+  // Payment method options
+  const paymentMethods = [
+    { value: 'CASH', label: 'Cash', icon: '💵', requiresReference: false },
+    { value: 'BANK_TRANSFER', label: 'Bank Transfer', icon: '🏦', requiresReference: true },
+    { value: 'CHEQUE', label: 'Cheque', icon: '📄', requiresReference: true },
+    { value: 'UPI', label: 'UPI', icon: '📱', requiresReference: true },
+    { value: 'CARD', label: 'Card', icon: '💳', requiresReference: true }
+  ];
+
   // Fetch suppliers
   useEffect(() => {
     async function fetchSuppliers() {
       try {
         const response = await fetch('/api/suppliers');
         const data = await response.json();
-        setSuppliers(data);
-        
+        setSuppliers(data.suppliers || []);
+
         // If supplierId is in query params, set the selected supplier
-        if (supplierId && data.length > 0) {
-          const supplier = data.find(s => s.id === parseInt(supplierId));
+        if (supplierId && data.suppliers && data.suppliers.length > 0) {
+          const supplier = data.suppliers.find(s => s.id === parseInt(supplierId));
           if (supplier) {
             setFormData(prev => ({ ...prev, supplierId: supplier.id }));
-            setSelectedSupplierBalance(supplier.balance);
+            setSelectedSupplierBalance(supplier.balance || 0);
           }
         }
       } catch (error) {
         console.error('Error fetching suppliers:', error);
       }
     }
-    
+
     fetchSuppliers();
   }, [supplierId]);
-  
+
+  // Fetch purchases for selected supplier
+  useEffect(() => {
+    async function fetchPurchases() {
+      if (formData.supplierId) {
+        try {
+          const response = await fetch(`/api/purchases?supplierId=${formData.supplierId}&unpaidOnly=true`);
+          const data = await response.json();
+          setPurchases(data);
+
+          // If purchaseId is in query params, set it
+          if (purchaseId && data.length > 0) {
+            const purchase = data.find(p => p.id === parseInt(purchaseId));
+            if (purchase) {
+              setFormData(prev => ({ ...prev, purchaseId: purchase.id }));
+              setSelectedPurchaseBalance(purchase.totalAmount - purchase.paidAmount);
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching purchases:', error);
+        }
+      } else {
+        setPurchases([]);
+      }
+    }
+
+    fetchPurchases();
+  }, [formData.supplierId, purchaseId]);
+
   // Update selected supplier balance when supplier changes
   const handleSupplierChange = (e) => {
     const selectedId = e.target.value;
-    setFormData(prev => ({ ...prev, supplierId: selectedId }));
-    
+    setFormData(prev => ({
+      ...prev,
+      supplierId: selectedId,
+      purchaseId: '' // Reset purchase selection when supplier changes
+    }));
+
     if (selectedId) {
       const supplier = suppliers.find(s => s.id === parseInt(selectedId));
       setSelectedSupplierBalance(supplier ? supplier.balance : 0);
     } else {
       setSelectedSupplierBalance(0);
     }
+    setSelectedPurchaseBalance(0);
   };
-  
+
+  // Handle purchase selection
+  const handlePurchaseChange = (e) => {
+    const selectedId = e.target.value;
+    setFormData(prev => ({ ...prev, purchaseId: selectedId }));
+
+    if (selectedId) {
+      const purchase = purchases.find(p => p.id === parseInt(selectedId));
+      setSelectedPurchaseBalance(purchase ? purchase.totalAmount - purchase.paidAmount : 0);
+    } else {
+      setSelectedPurchaseBalance(0);
+    }
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
-  
+
+  // Get reference placeholder text based on payment method
+  const getReferencePlaceholder = (method) => {
+    switch (method) {
+      case 'CHEQUE': return 'Cheque number';
+      case 'UPI': return 'Transaction ID';
+      case 'BANK_TRANSFER': return 'Reference number';
+      case 'CARD': return 'Last 4 digits';
+      default: return 'Reference';
+    }
+  };
+
+  // Check if reference is required for selected payment method
+  // This function is still here but will no longer be used to enforce 'required' on the input.
+  const isReferenceRequired = () => {
+    const method = paymentMethods.find(m => m.value === formData.paymentMethod);
+    return method?.requiresReference || false;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    
+
     try {
       const response = await fetch('/api/payments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          ...formData,
+          supplierId: parseInt(formData.supplierId),
+          purchaseId: formData.purchaseId ? parseInt(formData.purchaseId) : null,
+          amount: parseFloat(formData.amount)
+        })
       });
-      
+
       if (response.ok) {
         // Show success message with better UX
         const successDiv = document.createElement('div');
         successDiv.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50';
         successDiv.textContent = 'Payment recorded successfully!';
         document.body.appendChild(successDiv);
-        
+
         setTimeout(() => {
           document.body.removeChild(successDiv);
           router.push(`/suppliers/${formData.supplierId}`);
@@ -89,12 +172,19 @@ export default function MakePayment() {
       }
     } catch (error) {
       console.error('Error recording payment:', error);
-      alert('Error recording payment: ' + error.message);
+      // Using a custom message box instead of alert()
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50';
+      errorDiv.textContent = 'Error recording payment: ' + error.message;
+      document.body.appendChild(errorDiv);
+      setTimeout(() => {
+        document.body.removeChild(errorDiv);
+      }, 3000);
     } finally {
       setLoading(false);
     }
   };
-  
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-pink-50">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -114,12 +204,6 @@ export default function MakePayment() {
                 <h1 className="text-3xl font-bold text-slate-900 mb-2">Make Payment</h1>
                 <p className="text-slate-600">Record a payment to your supplier</p>
               </div>
-            </div>
-            <div className="hidden sm:flex items-center space-x-2 text-sm text-slate-500">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-              <span>Payment Form</span>
             </div>
           </div>
         </div>
@@ -151,12 +235,91 @@ export default function MakePayment() {
                       <option value="">Choose a supplier...</option>
                       {suppliers.map(supplier => (
                         <option key={supplier.id} value={supplier.id}>
-                          {supplier.name} (Balance: ₹{supplier.balance.toFixed(2)})
+                          {supplier.name} (Balance: ₹{supplier.balance?.toFixed(2) || '0.00'})
                         </option>
                       ))}
                     </select>
                   </div>
                 </div>
+
+                {/* Purchase Selection (Optional) */}
+                {purchases.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                      Link to Purchase (Optional)
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <svg className="h-5 w-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      <select
+                        id="purchaseId"
+                        name="purchaseId"
+                        value={formData.purchaseId}
+                        onChange={handlePurchaseChange}
+                        className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition-colors duration-200 bg-slate-50 focus:bg-white text-slate-900"
+                      >
+                        <option value="">General payment (not linked to specific purchase)</option>
+                        {purchases.map(purchase => (
+                          <option key={purchase.id} value={purchase.id}>
+                            Invoice #{purchase.invoiceNo || purchase.id} - Balance: ₹{(purchase.totalAmount - purchase.paidAmount).toFixed(2)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {/* Payment Method Selection */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    Payment Method *
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                    {paymentMethods.map(method => (
+                      <label
+                        key={method.value}
+                        className={`relative flex flex-col items-center p-3 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                          formData.paymentMethod === method.value
+                            ? 'border-pink-500 bg-pink-50 text-pink-700'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          value={method.value}
+                          checked={formData.paymentMethod === method.value}
+                          onChange={handleChange}
+                          className="sr-only"
+                        />
+                        <span className="text-2xl mb-1">{method.icon}</span>
+                        <span className="text-xs font-medium text-center">{method.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Reference Number (conditionally displayed, but not required) */}
+                {isReferenceRequired() && ( // Still show if it typically requires one
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                      {getReferencePlaceholder(formData.paymentMethod)} (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      id="reference"
+                      name="reference"
+                      value={formData.reference}
+                      onChange={handleChange}
+                      // Removed 'required' attribute here
+                      placeholder={getReferencePlaceholder(formData.paymentMethod)}
+                      className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition-colors duration-200 bg-slate-50 focus:bg-white text-slate-900"
+                    />
+                  </div>
+                )}
 
                 {/* Payment Amount */}
                 <div>
@@ -180,6 +343,18 @@ export default function MakePayment() {
                       className="w-full pl-8 pr-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition-colors duration-200 bg-slate-50 focus:bg-white text-slate-900"
                     />
                   </div>
+                  {/* Quick amount buttons for purchase balance */}
+                  {selectedPurchaseBalance > 0 && (
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, amount: selectedPurchaseBalance.toFixed(2) }))}
+                        className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
+                      >
+                        Pay Full Balance (₹{selectedPurchaseBalance.toFixed(2)})
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Payment Date */}
@@ -234,8 +409,7 @@ export default function MakePayment() {
                   </button>
                   <button
                     type="submit"
-                    // disabled={loading}
-                    disabled={loading || !formData.supplierId || !formData.amount}
+                    disabled={loading || !formData.supplierId || !formData.amount} // Removed reference validation from disabled state
                     className="flex-1 px-8 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-semibold rounded-xl hover:from-blue-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 focus:ring-2 focus:ring-blue-500"
                   >
                     {loading ? (
@@ -260,7 +434,7 @@ export default function MakePayment() {
             </div>
           </div>
 
-          {/* Sidebar - Supplier Info */}
+          {/* Sidebar - Payment Info */}
           <div className="space-y-6 lg:col-span-1">
             {/* Current Balance Card */}
             {formData.supplierId && (
@@ -274,8 +448,27 @@ export default function MakePayment() {
                     </div>
                   </div>
                   <div className="ml-4">
-                    <h3 className="text-sm font-medium text-red-900">Current Balance</h3>
+                    <h3 className="text-sm font-medium text-red-900">Supplier Balance</h3>
                     <p className="text-2xl font-bold text-red-600">₹{selectedSupplierBalance.toFixed(2)}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Purchase Balance (if selected) */}
+            {selectedPurchaseBalance > 0 && (
+              <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-2xl p-6 border border-orange-200">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-12 h-12 bg-orange-500 rounded-xl flex items-center justify-center">
+                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="ml-4">
+                    <h3 className="text-sm font-medium text-orange-900">Purchase Balance</h3>
+                    <p className="text-2xl font-bold text-orange-600">₹{selectedPurchaseBalance.toFixed(2)}</p>
                   </div>
                 </div>
               </div>
@@ -284,16 +477,24 @@ export default function MakePayment() {
             {/* Payment Preview */}
             {formData.amount && formData.supplierId && (
               <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-6 border border-green-200">
-                <h3 className="text-lg font-semibold text-green-900 mb-4">Payment Preview</h3>
+                <h3 className="text-lg font-semibold text-green-900 mb-4">Payment Summary</h3>
                 <div className="space-y-3">
                   <div className="flex justify-between">
-                    <span className="text-green-700">Payment Amount:</span>
-                    <span className="font-semibold text-green-900">₹{parseFloat(formData.amount || 0).toFixed(2)}</span>
+                    <span className="text-green-700">Payment Method:</span>
+                    <span className="font-semibold text-green-900">
+                      {paymentMethods.find(m => m.value === formData.paymentMethod)?.label}
+                    </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-green-700">Current Balance:</span>
-                    <span className="font-semibold text-green-900">₹{selectedSupplierBalance.toFixed(2)}</span>
+                    <span className="text-green-700">Amount:</span>
+                    <span className="font-semibold text-green-900">₹{parseFloat(formData.amount || 0).toFixed(2)}</span>
                   </div>
+                  {formData.reference && (
+                    <div className="flex justify-between">
+                      <span className="text-green-700">Reference:</span>
+                      <span className="font-semibold text-green-900">{formData.reference}</span>
+                    </div>
+                  )}
                   <hr className="border-green-200" />
                   <div className="flex justify-between">
                     <span className="text-green-700 font-medium">New Balance:</span>
@@ -307,19 +508,19 @@ export default function MakePayment() {
 
             {/* Quick Tips */}
             <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-6 border border-purple-200">
-              <h3 className="text-lg font-semibold text-purple-900 mb-4">💡 Quick Tips</h3>
+              <h3 className="text-lg font-semibold text-purple-900 mb-4">💡 Payment Tips</h3>
               <ul className="space-y-3 text-sm text-purple-700">
                 <li className="flex items-start">
                   <span className="flex-shrink-0 w-2 h-2 bg-purple-400 rounded-full mt-2 mr-3"></span>
-                  Double-check the payment amount before submitting
+                  You can link payments to specific purchases or make general payments
                 </li>
                 <li className="flex items-start">
                   <span className="flex-shrink-0 w-2 h-2 bg-purple-400 rounded-full mt-2 mr-3"></span>
-                  Add notes for better record keeping
+                  Reference numbers help track digital payments, but are optional.
                 </li>
                 <li className="flex items-start">
                   <span className="flex-shrink-0 w-2 h-2 bg-purple-400 rounded-full mt-2 mr-3"></span>
-                  Payment will update supplier's balance immediately
+                  Payment method affects suggested reference information
                 </li>
               </ul>
             </div>
