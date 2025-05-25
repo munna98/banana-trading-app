@@ -1,6 +1,6 @@
-// context/services/purchaseService.js
+// context/services/purchaseService.js (UPDATED - remove balance field from schema)
 import { getPrismaClient, handleDatabaseError } from './prismaService.js';
-import { supplierService } from './supplierService.js';
+import { transactionService } from './transactionService.js';
 
 const prisma = getPrismaClient();
 
@@ -15,7 +15,9 @@ export const purchaseService = {
             include: {
               item: true
             }
-          }
+          },
+          payments: true,
+          transaction: true
         },
         orderBy: { date: 'desc' }
       });
@@ -24,10 +26,9 @@ export const purchaseService = {
     }
   },
 
-  // Create new purchase
+  // Create new purchase with accounting entries
   async create(purchaseData, defaultWeightDeduction = 1.5) {
     try {
-      // Start a transaction
       return await prisma.$transaction(async (tx) => {
         // Create the purchase with items
         const newPurchase = await tx.purchase.create({
@@ -35,7 +36,7 @@ export const purchaseService = {
             supplierId: purchaseData.supplierId,
             totalAmount: purchaseData.totalAmount,
             paidAmount: purchaseData.paidAmount || 0,
-            balance: purchaseData.totalAmount - (purchaseData.paidAmount || 0),
+            invoiceNo: purchaseData.invoiceNo,
             items: {
               create: purchaseData.items.map(item => ({
                 itemId: item.itemId,
@@ -56,17 +57,21 @@ export const purchaseService = {
           }
         });
 
-        // Update supplier balance
-        if (newPurchase.balance > 0) {
-          await tx.supplier.update({
-            where: { id: purchaseData.supplierId },
+        // Update item stocks
+        for (const item of purchaseData.items) {
+          const netQuantity = item.quantity - (item.weightDeduction || defaultWeightDeduction);
+          await tx.item.update({
+            where: { id: item.itemId },
             data: {
-              balance: {
-                increment: newPurchase.balance
+              currentStock: {
+                increment: netQuantity
               }
             }
           });
         }
+
+        // Create accounting transaction
+        await transactionService.createPurchaseTransaction(newPurchase, tx);
 
         return newPurchase;
       });
@@ -102,29 +107,35 @@ export const purchaseService = {
         // Get purchase details first
         const purchase = await tx.purchase.findUnique({
           where: { id },
-          include: { supplier: true }
+          include: { 
+            supplier: true,
+            items: {
+              include: { item: true }
+            }
+          }
         });
 
         if (!purchase) {
           throw new Error('Purchase not found');
         }
 
-        // Delete the purchase (items will be deleted by cascade)
-        await tx.purchase.delete({
-          where: { id }
-        });
-
-        // Update supplier balance (reduce by purchase balance)
-        if (purchase.balance > 0) {
-          await tx.supplier.update({
-            where: { id: purchase.supplierId },
+        // Reverse stock updates
+        for (const purchaseItem of purchase.items) {
+          const netQuantity = purchaseItem.quantity - purchaseItem.weightDeduction;
+          await tx.item.update({
+            where: { id: purchaseItem.itemId },
             data: {
-              balance: {
-                decrement: purchase.balance
+              currentStock: {
+                decrement: netQuantity
               }
             }
           });
         }
+
+        // Delete the purchase (items will be deleted by cascade)
+        await tx.purchase.delete({
+          where: { id }
+        });
 
         return purchase;
       });
@@ -144,7 +155,9 @@ export const purchaseService = {
             include: {
               item: true
             }
-          }
+          },
+          payments: true,
+          transaction: true
         }
       });
     } catch (error) {
@@ -163,12 +176,32 @@ export const purchaseService = {
             include: {
               item: true
             }
-          }
+          },
+          payments: true
         },
         orderBy: { date: 'desc' }
       });
     } catch (error) {
       handleDatabaseError(error, 'Fetching purchases by supplier');
+    }
+  },
+
+  // Get outstanding purchases
+  async getOutstanding() {
+    try {
+      return await prisma.purchase.findMany({
+        where: {
+          totalAmount: {
+            gt: prisma.raw('paidAmount')
+          }
+        },
+        include: {
+          supplier: true
+        },
+        orderBy: { date: 'desc' }
+      });
+    } catch (error) {
+      handleDatabaseError(error, 'Fetching outstanding purchases');
     }
   }
 };

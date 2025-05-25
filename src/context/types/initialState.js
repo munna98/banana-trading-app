@@ -1,123 +1,60 @@
-// types/initialState.js
+// context/initialState.js
 
 export const initialState = {
-  // Core data arrays
-  items: [],
-  suppliers: [],
-  customers: [],
-  purchases: [],
-  sales: [],
-  expenses: [],
-  
-  // UI selection state
-  selectedItems: [],
-  selectedSuppliers: [],
-  selectedCustomers: [],
-  
-  // Loading states for different operations
-  loading: {
-    items: false,
-    suppliers: false,
-    customers: false,
-    purchases: false,
-    sales: false,
-    expenses: false,
-    general: false
-  },
-  
-  // Error handling
-  error: null,
-  
-  // UI state
+  // Global UI States (managed by uiReducer)
   ui: {
-    currentPage: 'dashboard',
-    sidebarOpen: true,
-    theme: 'light',
-    notifications: []
+    loading: false,
+    error: null, // Stores any global error message or object
+    // These could be general app settings that influence UI behavior or presentation
+    settings: {
+      theme: 'light',
+      currencySymbol: '₹', // Example UI setting
+      dateFormat: 'DD-MM-YYYY', // Example UI setting
+      // ... any other UI-specific settings
+    },
+    // Stats that are derived/calculated and primarily displayed in the UI
+    stats: {
+      totalItems: 0,
+      totalSuppliers: 0,
+      totalCustomers: 0,
+      totalPurchasesValue: 0,
+      totalSalesValue: 0,
+      // ... more dashboard-type stats
+    },
+    // Note: selectedSupplier and selectedCustomer are moved to the 'data' slice for entity selection
+    // If you prefer to manage current selections purely as UI state, you could keep them here
+    // e.g., selectedSupplierId: null, selectedCustomerId: null,
   },
-  
-  // Filters and search
-  filters: {
-    dateRange: {
-      start: null,
-      end: null
-    },
-    itemSearch: '',
-    supplierSearch: '',
-    customerSearch: '',
-    purchaseSearch: '',
-    saleSearch: '',
-    expenseSearch: ''
+
+  // Core Application Data (managed by dataReducer)
+  data: {
+    items: [],
+    suppliers: [],
+    customers: [],
+    expenses: [], // Assuming this refers to managing Expense Categories, not individual expense transactions
+    accounts: [],
+    expenseCategories: [],
+    cashBookEntries: [],
+    bankTransactions: [],
+    reportingPeriods: [],
+    inventorySnapshots: [],
+    selectedSupplier: null, // Stores the full selected supplier object, if any
+    selectedCustomer: null, // Stores the full selected customer object, if any
   },
-  
-  // Pagination
-  pagination: {
-    items: { page: 1, limit: 10, total: 0 },
-    suppliers: { page: 1, limit: 10, total: 0 },
-    customers: { page: 1, limit: 10, total: 0 },
-    purchases: { page: 1, limit: 10, total: 0 },
-    sales: { page: 1, limit: 10, total: 0 },
-    expenses: { page: 1, limit: 10, total: 0 }
+
+  // Transactional Data (managed by transactionReducer)
+  transactions: {
+    purchases: [],
+    sales: [],
+    payments: [],
+    receipts: [],
+    transactions: [], // General financial transactions
   },
-  
-  // Form states
-  forms: {
-    item: {
-      isOpen: false,
-      mode: 'create', // 'create' or 'edit'
-      data: null
-    },
-    supplier: {
-      isOpen: false,
-      mode: 'create',
-      data: null
-    },
-    customer: {
-      isOpen: false,
-      mode: 'create',
-      data: null
-    },
-    purchase: {
-      isOpen: false,
-      mode: 'create',
-      data: null
-    },
-    sale: {
-      isOpen: false,
-      mode: 'create',
-      data: null
-    },
-    expense: {
-      isOpen: false,
-      mode: 'create',
-      data: null
-    }
-  },
-  
-  // Settings
-  settings: {
-    currency: 'INR',
-    dateFormat: 'MM/DD/YYYY',
-    numberFormat: 'en-US',
-    taxRate: 0,
-    companyInfo: {
-      name: '',
-      address: '',
-      phone: '',
-      email: '',
-      website: ''
-    }
-  },
-  
-  // Cache for performance
-  cache: {
-    lastFetch: {
-      items: null,
-      suppliers: null,
-      customers: null,
-      purchases: null,
-      sales: null,
-      expenses: null
-    }
-  }
+
+  // You might have other top-level slices for authentication, user, etc.
+  // auth: {
+  //   isAuthenticated: false,
+  //   user: null,
+  //   token: null,
+  // },
 };
