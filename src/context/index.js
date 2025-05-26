@@ -6,7 +6,7 @@ export { AppProvider, useAppContext } from './AppContext.js';
 // Types
 export { ActionTypes } from './types/actionTypes.js';
 // Corrected path for initialState if it's directly in context/
-export { initialState } from './initialState.js';
+export { initialState } from './types/initialState.js';
 
 // Reducers
 // appReducer is removed as it's now a combined rootReducer internally in AppContext

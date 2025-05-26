@@ -69,7 +69,6 @@ export function useDataFetching(dispatch) {
         customers,
         purchases,
         sales,
-        expenses, // Assuming this maps to a general 'expense' list, or your ExpenseCategory
         payments,
         receipts,
         transactions,
@@ -85,7 +84,6 @@ export function useDataFetching(dispatch) {
         customerService.getAll(),
         purchaseService.getAll(),
         saleService.getAll(),
-        expenseService.getAll(), // Adjust service if this is for ExpenseCategory
         paymentService.getAll(),
         receiptService.getAll(),
         transactionService.getAll(),
@@ -110,7 +108,6 @@ export function useDataFetching(dispatch) {
       dispatch({ type: ActionTypes.SET_TRANSACTIONS, payload: transactions || [] });
 
       // Accounting and Inventory Data
-      dispatch({ type: ActionTypes.SET_EXPENSES, payload: expenses || [] }); // Adjust if this refers to ExpenseCategory
       dispatch({ type: ActionTypes.SET_ACCOUNTS, payload: accounts || [] });
       dispatch({ type: ActionTypes.SET_EXPENSE_CATEGORIES, payload: expenseCategories || [] });
       dispatch({ type: ActionTypes.SET_CASH_BOOK_ENTRIES, payload: cashBookEntries || [] });
@@ -119,7 +116,7 @@ export function useDataFetching(dispatch) {
       dispatch({ type: ActionTypes.SET_INVENTORY_SNAPSHOTS, payload: inventorySnapshots || [] });
 
       return {
-        items, suppliers, customers, purchases, sales, expenses,
+        items, suppliers, customers, purchases, sales,
         payments, receipts, transactions, accounts, expenseCategories,
         cashBookEntries, bankTransactions, reportingPeriods, inventorySnapshots
       };
@@ -628,12 +625,6 @@ export function useDataFetching(dispatch) {
     createSale,
     updateSale,
     deleteSale,
-
-    // Expenses (Manage general expenses / expense types)
-    fetchExpenses,
-    createExpense,
-    updateExpense,
-    deleteExpense,
 
     // Payments
     fetchPayments,

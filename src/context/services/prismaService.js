@@ -12,6 +12,7 @@ export function getPrismaClient() {
 }
 
 // Generic error handler for database operations
+
 export function handleDatabaseError(error, operation) {
   console.error(`Database error during ${operation}:`, error);
   throw new Error(`${operation} failed: ${error.message}`);

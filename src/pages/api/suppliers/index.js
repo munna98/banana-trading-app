@@ -27,7 +27,8 @@ export default async function handler(req, res) {
         take: limitNum,
         include: {
           purchases: { select: { id: true, totalAmount: true, date: true } },
-          payments: { select: { id: true, amount: true, date: true } }
+          payments: { select: { id: true, amount: true, date: true } },
+          account: true, // Include the associated account
         },
         orderBy: { createdAt: 'desc' }
       })
@@ -47,7 +48,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
-      const { name, phone, address, balance = 0 } = req.body
+      const { name, phone, address } = req.body
 
       if (!name) {
         return res.status(400).json({
@@ -57,17 +58,52 @@ export default async function handler(req, res) {
         })
       }
 
-      const newSupplier = await prisma.supplier.create({
-        data: {
-          name,
-          phone,
-          address,
+      // Start a Prisma transaction
+      const newSupplier = await prisma.$transaction(async (prisma) => {
+        // 1. Find the 'Trade Payables' parent account
+        const tradePayablesAccount = await prisma.account.findFirst({
+          where: {
+            name: 'Trade Payables', // Assuming 'Trade Payables' is the name of your parent account
+            type: 'LIABILITY' // Assuming 'Trade Payables' is a LIABILITY type account
+          }
+        })
+
+        if (!tradePayablesAccount) {
+          throw new Error('Trade Payables account not found. Please create it first.')
         }
+
+        // 2. Create a new account for the supplier under 'Trade Payables'
+        const supplierAccount = await prisma.account.create({
+          data: {
+            name: `${name}`, // A descriptive name for the supplier's account
+            code: `SUPP-${Date.now()}`, // Generate a unique code (you might want a more robust system)
+            type: 'LIABILITY', // Supplier accounts are typically Liabilities
+            parentId: tradePayablesAccount.id,
+            description: `Account for supplier: ${name}`,
+            isActive: true,
+          }
+        })
+
+        // 3. Create the new supplier, linking it to the newly created account
+        const supplier = await prisma.supplier.create({
+          data: {
+            name,
+            phone,
+            address,
+            accountId: supplierAccount.id, // Link the supplier to its account
+          },
+          include: {
+            account: true, // Include the created account in the response
+          }
+        })
+
+        return supplier
       })
+
 
       return res.status(201).json({
         success: true,
-        message: 'Supplier created successfully',
+        message: 'Supplier created successfully with associated account',
         supplier: newSupplier
       })
     }
@@ -80,6 +116,22 @@ export default async function handler(req, res) {
     })
   } catch (error) {
     console.error('Supplier API error:', error)
+    // Handle specific errors for better client feedback
+    if (error.message.includes('Trade Payables account not found')) {
+      return res.status(404).json({
+        success: false,
+        error: 'Dependent account not found',
+        message: error.message
+      })
+    }
+    // Prisma unique constraint error (e.g., if phone is unique and duplicate)
+    if (error.code === 'P2002') {
+      return res.status(409).json({
+        success: false,
+        error: 'Duplicate entry',
+        message: `A supplier with the provided ${error.meta.target} already exists.`
+      });
+    }
     res.status(500).json({
       success: false,
       error: 'Internal server error',

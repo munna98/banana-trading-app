@@ -34,28 +34,33 @@ export default function ReceivePayment() {
   ];
 
   // Fetch customers
-  useEffect(() => {
-    async function fetchCustomers() {
-      try {
-        const response = await fetch('/api/customers');
-        const data = await response.json();
-        setCustomers(data);
+useEffect(() => {
+  async function fetchCustomers() {
+    try {
+      const response = await fetch('/api/customers');
+      const data = await response.json();
+      
+      // Handle the nested response structure
+      const customersArray = data.customers || data || [];
+      setCustomers(customersArray);
 
-        // If customerId is in query params, set the selected customer
-        if (customerId && data.length > 0) {
-          const customer = data.find(c => c.id === parseInt(customerId));
-          if (customer) {
-            setFormData(prev => ({ ...prev, customerId: customer.id }));
-            setSelectedCustomerBalance(customer.balance || 0);
-          }
+      // If customerId is in query params, set the selected customer
+      if (customerId && customersArray.length > 0) {
+        const customer = customersArray.find(c => c.id === parseInt(customerId));
+        if (customer) {
+          setFormData(prev => ({ ...prev, customerId: customer.id }));
+          // Calculate balance from receipts and sales if available
+          const customerBalance = calculateCustomerBalance(customer);
+          setSelectedCustomerBalance(customerBalance);
         }
-      } catch (error) {
-        console.error('Error fetching customers:', error);
       }
+    } catch (error) {
+      console.error('Error fetching customers:', error);
     }
+  }
 
-    fetchCustomers();
-  }, [customerId]);
+  fetchCustomers();
+}, [customerId]);
 
 console.log(customers,customers);
 
@@ -185,7 +190,7 @@ console.log(customers,customers);
     } finally {
       setLoading(false);
     }
-  };
+  }; 
 
   const selectedCustomer = customers.find(c => c.id === parseInt(formData.customerId));
 

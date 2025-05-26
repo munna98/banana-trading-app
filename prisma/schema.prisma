@@ -35,6 +35,8 @@ model Supplier {
   updatedAt DateTime   @updatedAt
   purchases Purchase[]
   payments  Payment[] // Payments *made to* this supplier
+  account   Account    @relation(fields: [accountId], references: [id])
+  accountId Int        @unique
 }
 
 model Customer {
@@ -46,6 +48,8 @@ model Customer {
   updatedAt DateTime  @updatedAt
   sales     Sale[]
   receipts  Receipt[] // Receipts *received from* this customer
+  account   Account   @relation(fields: [accountId], references: [id])
+  accountId Int       @unique
 }
 
 model Purchase {
@@ -167,7 +171,6 @@ model Transaction {
   sale         Sale?           @relation(fields: [saleId], references: [id])
   payment      Payment?        @relation(fields: [paymentId], references: [id])
   receipt      Receipt?        @relation(fields: [receiptId], references: [id])
-  category     ExpenseCategory? @relation(fields: [categoryId], references: [id])
   bankTransaction BankTransaction? @relation // MODIFIED: Removed fields and references here
 
   entries      TransactionEntry[]
@@ -196,20 +199,13 @@ model Account {
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
 
+  supplier    Supplier?    
+  customer    Customer? 
   parent      Account?           @relation("AccountHierarchy", fields: [parentId], references: [id])
   children    Account[]          @relation("AccountHierarchy")
   entries     TransactionEntry[]
 }
 
-model ExpenseCategory {
-  id          Int            @id @default(autoincrement())
-  name        String         @unique
-  description String?
-  isActive    Boolean        @default(true)
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  transactions Transaction[]
-}
 
 model CashBook {
   id          Int      @id @default(autoincrement())
