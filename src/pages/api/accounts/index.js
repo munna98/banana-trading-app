@@ -14,7 +14,7 @@ export default async function handler(req, res) {
         return await handlePost(req, res);
       default:
         res.setHeader('Allow', ['GET', 'POST']);
-        return res.status(405).json({ 
+        return res.status(405).json({
           error: `Method ${method} not allowed`,
           allowedMethods: ['GET', 'POST'],
           message: 'Use /api/accounts/[id] for individual account operations'
@@ -22,9 +22,9 @@ export default async function handler(req, res) {
     }
   } catch (error) {
     console.error('API Error:', error);
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: 'Internal server error',
-      message: error.message 
+      message: error.message
     });
   } finally {
     await prisma.$disconnect();
@@ -33,34 +33,35 @@ export default async function handler(req, res) {
 
 // GET /api/accounts - Fetch accounts with various filters and options
 async function handleGet(req, res) {
-  const { 
-    type,           // Filter by account type
-    parentId,       // Filter by parent account
-    includeChildren, // Include child accounts
-    includeParent,  // Include parent account
-    active,         // Filter by active status
-    search,         // Search in name or code
-    hierarchical,   // Return as hierarchical structure
-    page = 1,       // Pagination
-    limit = 100       //Items per page
+  const {
+    type,
+    parentId,
+    includeChildren,
+    includeParent,
+    active,
+    search,
+    hierarchical,
+    canBeDebitedForPayments, // NEW: Filter for accounts suitable for payments
+    page = 1,
+    limit = 100
   } = req.query;
 
   try {
     // Build where clause
     const where = {};
-    
+
     if (type) {
       where.type = type;
     }
-    
+
     if (parentId) {
       where.parentId = parentId === 'null' ? null : parseInt(parentId);
     }
-    
+
     if (active !== undefined) {
       where.isActive = active === 'true';
     }
-    
+
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
@@ -69,19 +70,44 @@ async function handleGet(req, res) {
       ];
     }
 
+    // NEW: Logic for canBeDebitedForPayments
+    if (canBeDebitedForPayments === 'true') {
+      where.OR = [
+        { type: 'EXPENSE' },
+        {
+          type: 'LIABILITY',
+          // Corrected: Use relational filter for supplier existence
+          supplier: {
+            isNot: null // Checks if a supplier relation exists for this account
+          }
+        },
+      ];
+      // When filtering for debited accounts, we want to include their parent and supplier info
+      // to display properly on the frontend.
+      Object.assign(where, { isActive: true }); // Only show active accounts for payments
+    }
+
+
     // Build include clause
     const include = {};
-    
+
     if (includeChildren === 'true') {
       include.children = {
         where: { isActive: true },
         orderBy: { code: 'asc' }
       };
     }
-    
-    if (includeParent === 'true') {
+
+    // Always include parent and supplier if canBeDebitedForPayments is true
+    // or if explicitly requested by includeParent/includeSupplier
+    if (includeParent === 'true' || canBeDebitedForPayments === 'true') {
       include.parent = true;
     }
+
+    // Include supplier relation if the account can have one
+    // This is crucial for the frontend to display supplier name
+    include.supplier = true;
+
 
     // For hierarchical view, get root accounts with all children
     if (hierarchical === 'true') {
@@ -95,11 +121,17 @@ async function handleGet(req, res) {
             include: {
               children: {
                 include: {
-                  children: true // Support up to 4 levels deep
+                  children: {
+                    include: {
+                      children: true // Support up to 4 levels deep
+                    }
+                  }
                 }
               }
             }
-          }
+          },
+          parent: true, // Include parent for root accounts (will be null)
+          supplier: true // Include supplier for root accounts
         },
         orderBy: { code: 'asc' }
       });
@@ -116,11 +148,11 @@ async function handleGet(req, res) {
 
     // Regular paginated query
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    
+
     const [accounts, total] = await Promise.all([
       prisma.account.findMany({
         where,
-        include,
+        include, // Use the dynamically built include object
         orderBy: { code: 'asc' },
         skip,
         take: parseInt(limit)
@@ -141,10 +173,10 @@ async function handleGet(req, res) {
 
   } catch (error) {
     console.error('GET Error:', error);
-    return res.status(500).json({ 
+    return res.status(500).json({
       success: false,
       error: 'Failed to fetch accounts',
-      message: error.message 
+      message: error.message
     });
   }
 }
@@ -256,7 +288,8 @@ async function handlePost(req, res) {
             isActive
           },
           include: {
-            parent: true
+            parent: true, // Include parent to return parent's data
+            supplier: true // Include supplier if linked
           }
         });
 
@@ -264,7 +297,7 @@ async function handlePost(req, res) {
 
       } catch (error) {
         console.error(`Error creating account ${code}:`, error);
-        
+
         if (error.code === 'P2002') {
           errors.push({
             index: i,
@@ -294,14 +327,14 @@ async function handlePost(req, res) {
     }
 
     if (results.length > 0 && errors.length === 0) {
-      response.message = isArray ? 
-        `Successfully created ${results.length} accounts` : 
+      response.message = isArray ?
+        `Successfully created ${results.length} accounts` :
         'Account created successfully';
     } else if (results.length > 0 && errors.length > 0) {
       response.message = `Created ${results.length} accounts with ${errors.length} failures`;
     }
 
-    const statusCode = results.length > 0 ? 
+    const statusCode = results.length > 0 ?
       (errors.length > 0 ? 207 : 201) : // 207 Multi-Status for partial success
       400;
 
