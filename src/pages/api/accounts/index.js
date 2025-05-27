@@ -42,7 +42,7 @@ async function handleGet(req, res) {
     search,         // Search in name or code
     hierarchical,   // Return as hierarchical structure
     page = 1,       // Pagination
-    limit = 50      // Items per page
+    limit = 100       //Items per page
   } = req.query;
 
   try {
@@ -317,5 +317,5 @@ async function handlePost(req, res) {
   }
 }
 
-// Export for use in other modules
-module.exports = { handleGet };
+// Export for use in other modules (ES6 syntax)
+export { handleGet };
