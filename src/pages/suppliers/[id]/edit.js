@@ -5,7 +5,7 @@ import Link from 'next/link';
 
 export default function EditSupplier() {
   const router = useRouter();
-  const { id } = router.query;
+  const { id } = router.query; // Get the ID from the URL query parameters
 
   const [formData, setFormData] = useState({
     name: '',
@@ -14,83 +14,96 @@ export default function EditSupplier() {
   });
 
   const [errors, setErrors] = useState({});
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true); // State to manage loading of initial data
+  const [isSubmitting, setIsSubmitting] = useState(false); // State to manage form submission status
 
   // Effect to fetch supplier data when the component mounts or ID changes
   useEffect(() => {
+    // Ensure ID is available before attempting to fetch
     if (!id) return;
 
     const fetchSupplier = async () => {
       try {
-        setIsLoading(true);
+        setIsLoading(true); // Start loading state
+        // Fetch data for the specific supplier using the ID
         const response = await fetch(`/api/suppliers/${id}`);
         const data = await response.json();
 
-        if (response.ok) {
-          // API returns supplier data directly, not wrapped in {success: true, supplier: data}
+        if (response.ok && data.success) { // Check both response.ok and data.success
+          // CORRECTED: Access data.supplier to get the actual supplier object
           setFormData({
-            name: data.name || '',
-            phone: data.phone || '',
-            address: data.address || '',
+            name: data.supplier.name || '',
+            phone: data.supplier.phone || '',
+            address: data.supplier.address || '',
           });
         } else {
+          // If the response is not OK or success is false, throw an error
           throw new Error(data.error || 'Failed to fetch supplier data');
         }
       } catch (error) {
+        // Catch any errors during the fetch process and set an error message
         console.error('Error fetching supplier:', error);
         setErrors({ fetch: error.message });
       } finally {
-        setIsLoading(false);
+        setIsLoading(false); // End loading state regardless of success or failure
       }
     };
 
-    fetchSupplier();
-  }, [id]);
+    fetchSupplier(); // Call the fetch function
+  }, [id]); // Rerun this effect whenever the 'id' changes
 
+  // Function to validate the form inputs
   const validateForm = () => {
     const newErrors = {};
 
+    // Validate supplier name: it's required
     if (!formData.name.trim()) {
       newErrors.name = 'Supplier name is required';
     }
 
+    // Validate phone number format if provided
     if (formData.phone && formData.phone.trim()) {
+      // Regex to allow digits, spaces, hyphens, plus signs, and parentheses
       const phoneRegex = /^[\d\s\-\+\(\)]+$/;
       if (!phoneRegex.test(formData.phone.trim())) {
         newErrors.phone = 'Please enter a valid phone number';
       }
     }
 
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    setErrors(newErrors); // Update the errors state
+    return Object.keys(newErrors).length === 0; // Return true if no errors
   };
 
+  // Handler for input changes
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData(prev => ({ ...prev, [name]: value })); // Update form data
 
-    // Clear error for this field when user starts typing
+    // Clear the specific error message for the field being edited
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
   };
 
+  // Handler for form submission
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    e.preventDefault(); // Prevent default form submission behavior
 
+    // Validate the form before submitting
     if (!validateForm()) {
-      return;
+      return; // Stop if validation fails
     }
 
-    setIsSubmitting(true);
+    setIsSubmitting(true); // Set submitting state to true
 
     try {
+      // Send a PUT request to update the supplier
       const response = await fetch(`/api/suppliers/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
         },
+        // Send trimmed values; send null for empty optional fields
         body: JSON.stringify({
           name: formData.name.trim(),
           phone: formData.phone.trim() || null,
@@ -98,21 +111,24 @@ export default function EditSupplier() {
         })
       });
 
-      const data = await response.json();
+      const data = await response.json(); // Parse the JSON response
 
-      if (response.ok) {
-        router.push('/suppliers');
+      if (response.ok && data.success) { // Check both response.ok and data.success
+        router.push('/suppliers'); // Redirect to the suppliers list on success
       } else {
+        // If the response is not OK or success is false, throw an error
         throw new Error(data.error || 'Failed to update supplier');
       }
     } catch (error) {
+      // Catch any errors during submission and display an error message
       console.error('Error updating supplier:', error);
       setErrors({ submit: error.message });
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false); // Reset submitting state
     }
   };
 
+  // Display a loading spinner while fetching initial supplier data
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">

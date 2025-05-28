@@ -339,7 +339,7 @@ export default function AccountsList() {
                 Refresh
               </button>
               <Link
-                href="/accounts/new"
+                href="/accounts/add"
                 className="inline-flex items-center justify-center px-6 py-3 bg-indigo-500 text-white font-semibold rounded-xl hover:bg-indigo-600 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
               >
                 <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

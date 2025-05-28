@@ -189,23 +189,29 @@ model TransactionEntry {
 }
 
 model Account {
-  id          Int                @id @default(autoincrement())
-  code        String             @unique
-  name        String
-  type        AccountType
-  parentId    Int?
-  isActive    Boolean            @default(true)
-  description String?
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  id                  Int                @id @default(autoincrement())
+  code                String             @unique
+  name                String
+  type                AccountType
+  parentId            Int?
+  isActive            Boolean            @default(true)
+  description         String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
 
-  supplier    Supplier?    
-  customer    Customer? 
-  parent      Account?           @relation("AccountHierarchy", fields: [parentId], references: [id])
-  children    Account[]          @relation("AccountHierarchy")
-  entries     TransactionEntry[]
+  // New fields
+  openingBalance      Decimal?           @default(0.0)
+  canDebitOnPayment   Boolean            @default(false)
+  canCreditOnReceipt  Boolean            @default(false)
+  isSeeded            Boolean            @default(false)
+
+  // Relations
+  supplier            Supplier?    
+  customer            Customer? 
+  parent              Account?           @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children            Account[]          @relation("AccountHierarchy")
+  entries             TransactionEntry[]
 }
-
 
 model CashBook {
   id          Int      @id @default(autoincrement())

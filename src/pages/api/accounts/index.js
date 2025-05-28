@@ -41,7 +41,8 @@ async function handleGet(req, res) {
     active,
     search,
     hierarchical,
-    canBeDebitedForPayments, // NEW: Filter for accounts suitable for payments
+    canBeDebitedForPayments, // Filter for accounts suitable for payments
+    canBeCreditedForReceipts, // NEW: Filter for accounts suitable for receipts
     page = 1,
     limit = 100
   } = req.query;
@@ -70,23 +71,17 @@ async function handleGet(req, res) {
       ];
     }
 
-    // NEW: Logic for canBeDebitedForPayments
+    // NEW: Simplified logic using the new canDebitOnPayment field
     if (canBeDebitedForPayments === 'true') {
-      where.OR = [
-        { type: 'EXPENSE' },
-        {
-          type: 'LIABILITY',
-          // Corrected: Use relational filter for supplier existence
-          supplier: {
-            isNot: null // Checks if a supplier relation exists for this account
-          }
-        },
-      ];
-      // When filtering for debited accounts, we want to include their parent and supplier info
-      // to display properly on the frontend.
-      Object.assign(where, { isActive: true }); // Only show active accounts for payments
+      where.canDebitOnPayment = true;
+      where.isActive = true; // Only show active accounts for payments
     }
 
+    // NEW: Filter for accounts that can be credited on receipts
+    if (canBeCreditedForReceipts === 'true') {
+      where.canCreditOnReceipt = true;
+      where.isActive = true; // Only show active accounts for receipts
+    }
 
     // Build include clause
     const include = {};
@@ -98,16 +93,15 @@ async function handleGet(req, res) {
       };
     }
 
-    // Always include parent and supplier if canBeDebitedForPayments is true
-    // or if explicitly requested by includeParent/includeSupplier
-    if (includeParent === 'true' || canBeDebitedForPayments === 'true') {
+    // Always include parent and supplier if canBeDebitedForPayments or canBeCreditedForReceipts is true
+    // or if explicitly requested by includeParent
+    if (includeParent === 'true' || canBeDebitedForPayments === 'true' || canBeCreditedForReceipts === 'true') {
       include.parent = true;
     }
 
-    // Include supplier relation if the account can have one
-    // This is crucial for the frontend to display supplier name
+    // Include supplier and customer relations
     include.supplier = true;
-
+    include.customer = true;
 
     // For hierarchical view, get root accounts with all children
     if (hierarchical === 'true') {
@@ -131,7 +125,8 @@ async function handleGet(req, res) {
             }
           },
           parent: true, // Include parent for root accounts (will be null)
-          supplier: true // Include supplier for root accounts
+          supplier: true, // Include supplier for root accounts
+          customer: true // Include customer for root accounts
         },
         orderBy: { code: 'asc' }
       });
@@ -192,7 +187,7 @@ async function handlePost(req, res) {
 
   for (let i = 0; i < accounts.length; i++) {
     const account = accounts[i];
-    const { code, name, type } = account;
+    const { code, name, type, openingBalance, canDebitOnPayment, canCreditOnReceipt } = account;
 
     if (!code || !name || !type) {
       validationErrors.push({
@@ -211,6 +206,35 @@ async function handlePost(req, res) {
         received: type
       });
     }
+
+    // Validate openingBalance if provided
+    if (openingBalance !== undefined && isNaN(parseFloat(openingBalance))) {
+      validationErrors.push({
+        index: i,
+        error: 'Invalid opening balance',
+        message: 'Opening balance must be a valid number',
+        received: openingBalance
+      });
+    }
+
+    // Validate boolean fields
+    if (canDebitOnPayment !== undefined && typeof canDebitOnPayment !== 'boolean') {
+      validationErrors.push({
+        index: i,
+        error: 'Invalid canDebitOnPayment value',
+        message: 'canDebitOnPayment must be a boolean',
+        received: canDebitOnPayment
+      });
+    }
+
+    if (canCreditOnReceipt !== undefined && typeof canCreditOnReceipt !== 'boolean') {
+      validationErrors.push({
+        index: i,
+        error: 'Invalid canCreditOnReceipt value',
+        message: 'canCreditOnReceipt must be a boolean',
+        received: canCreditOnReceipt
+      });
+    }
   }
 
   if (validationErrors.length > 0) {
@@ -227,7 +251,21 @@ async function handlePost(req, res) {
 
     // Process each account
     for (let i = 0; i < accounts.length; i++) {
-      const { code, name, type, parentId, description, isActive = true } = accounts[i];
+      const {
+        code,
+        name,
+        type,
+        parentId,
+        description,
+        isActive = true,
+        openingBalance = 0.0,
+        // Keep these for initial defaulting if no parent is provided
+        canDebitOnPayment: requestCanDebitOnPayment,
+        canCreditOnReceipt: requestCanCreditOnReceipt
+      } = accounts[i];
+
+      let effectiveCanDebitOnPayment = requestCanDebitOnPayment;
+      let effectiveCanCreditOnReceipt = requestCanCreditOnReceipt;
 
       try {
         // Check if code already exists
@@ -248,9 +286,10 @@ async function handlePost(req, res) {
           continue;
         }
 
+        let parentAccount = null;
         // Validate parent account if provided
         if (parentId) {
-          const parentAccount = await prisma.account.findUnique({
+          parentAccount = await prisma.account.findUnique({
             where: { id: parseInt(parentId) }
           });
 
@@ -275,7 +314,25 @@ async function handlePost(req, res) {
             });
             continue;
           }
+
+          // --- NEW: Inherit canDebitOnPayment and canCreditOnReceipt from parent if not explicitly set ---
+          if (requestCanDebitOnPayment === undefined) {
+            effectiveCanDebitOnPayment = parentAccount.canDebitOnPayment;
+          }
+          if (requestCanCreditOnReceipt === undefined) {
+            effectiveCanCreditOnReceipt = parentAccount.canCreditOnReceipt;
+          }
+          // --- END NEW ---
+        } else {
+          // If no parentId, and not explicitly set in request, default to true
+          if (requestCanDebitOnPayment === undefined) {
+            effectiveCanDebitOnPayment = true;
+          }
+          if (requestCanCreditOnReceipt === undefined) {
+            effectiveCanCreditOnReceipt = true;
+          }
         }
+
 
         // Create the account
         const account = await prisma.account.create({
@@ -285,11 +342,15 @@ async function handlePost(req, res) {
             type,
             parentId: parentId ? parseInt(parentId) : null,
             description,
-            isActive
+            isActive,
+            openingBalance: parseFloat(openingBalance),
+            canDebitOnPayment: effectiveCanDebitOnPayment, // Use the effective value
+            canCreditOnReceipt: effectiveCanCreditOnReceipt // Use the effective value
           },
           include: {
             parent: true, // Include parent to return parent's data
-            supplier: true // Include supplier if linked
+            supplier: true, // Include supplier if linked
+            customer: true // Include customer if linked
           }
         });
 

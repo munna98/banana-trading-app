@@ -81,6 +81,10 @@ export default async function handler(req, res) {
             parentId: tradePayablesAccount.id,
             description: `Account for supplier: ${name}`,
             isActive: true,
+            // --- NEW: Set canDebitOnPayment and canCreditOnReceipt to true for supplier accounts ---
+            canDebitOnPayment: true,
+            canCreditOnReceipt: true,
+            // --- END NEW ---
           }
         })
 

@@ -138,7 +138,7 @@ export default function MakePayment() {
       if (selectedAccount) {
         try {
           const accountBalanceResponse = await fetch(
-            `/api/accounts/${selectedAccountId}/balance`
+            `/api/accounts/${selectedAccountId}`
           );
           const accountBalanceData = await accountBalanceResponse.json();
           accountBalance = accountBalanceData.balance || 0;

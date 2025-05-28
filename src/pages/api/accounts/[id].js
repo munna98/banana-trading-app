@@ -52,6 +52,7 @@ async function handleGet(req, res, accountId) {
     includeParent,
     includeEntries,
     includeFullHierarchy,
+    includeBalance = 'true', // Parameter to control balance calculation
     entriesLimit = 50
   } = req.query;
 
@@ -95,6 +96,10 @@ async function handleGet(req, res, accountId) {
       };
     }
 
+    // Always include supplier and customer relations
+    include.supplier = true;
+    include.customer = true;
+
     const account = await prisma.account.findUnique({
       where: { id: accountId },
       include
@@ -123,38 +128,48 @@ async function handleGet(req, res, accountId) {
       metadata.entriesCount = await prisma.transactionEntry.count({
         where: { accountId }
       });
-    } else if (parseInt(entriesLimit) < metadata.entriesCount) {
-      metadata.totalEntries = await prisma.transactionEntry.count({
+    } else {
+      const totalEntries = await prisma.transactionEntry.count({
         where: { accountId }
       });
-      metadata.showingEntries = parseInt(entriesLimit);
-    }
-
-    // Calculate account balance
-    const balanceResult = await prisma.transactionEntry.aggregate({
-      where: { accountId },
-      _sum: {
-        debit: true,
-        credit: true
+      if (parseInt(entriesLimit) < totalEntries) {
+        metadata.totalEntries = totalEntries;
+        metadata.showingEntries = parseInt(entriesLimit);
       }
-    });
-
-    const totalDebits = balanceResult._sum.debit || 0;
-    const totalCredits = balanceResult._sum.credit || 0;
-    
-    // Balance calculation depends on account type
-    let balance;
-    if (['ASSET', 'EXPENSE'].includes(account.type)) {
-      balance = totalDebits - totalCredits; // Debit balance accounts
-    } else {
-      balance = totalCredits - totalDebits; // Credit balance accounts
     }
 
-    metadata.balance = {
-      current: balance,
-      totalDebits,
-      totalCredits
-    };
+    // Calculate account balance only if requested (default: true)
+    if (includeBalance === 'true') {
+      const balanceResult = await prisma.transactionEntry.aggregate({
+        where: { accountId },
+        _sum: {
+          debitAmount: true,
+          creditAmount: true
+        }
+      });
+
+      const totalDebits = balanceResult._sum.debitAmount || 0;
+      const totalCredits = balanceResult._sum.creditAmount || 0;
+      
+      // Balance calculation depends on account type
+      let balance;
+      if (['ASSET', 'EXPENSE'].includes(account.type)) {
+        balance = totalDebits - totalCredits; // Debit balance accounts
+      } else {
+        balance = totalCredits - totalDebits; // Credit balance accounts
+      }
+
+      // Include opening balance in the calculation
+      const currentBalance = parseFloat(balance) + parseFloat(account.openingBalance || 0);
+
+      metadata.balance = {
+        current: currentBalance,
+        opening: parseFloat(account.openingBalance || 0),
+        transactionBalance: parseFloat(balance),
+        totalDebits: parseFloat(totalDebits),
+        totalCredits: parseFloat(totalCredits)
+      };
+    }
 
     return res.status(200).json({
       success: true,
@@ -174,7 +189,17 @@ async function handleGet(req, res, accountId) {
 
 // PUT /api/accounts/[id] - Update a specific account
 async function handlePut(req, res, accountId) {
-  const { code, name, type, parentId, description, isActive } = req.body;
+  const { 
+    code, 
+    name, 
+    type, 
+    parentId, 
+    description, 
+    isActive,
+    openingBalance,
+    canDebitOnPayment,
+    canCreditOnReceipt
+  } = req.body;
 
   try {
     // Check if account exists
@@ -193,6 +218,16 @@ async function handlePut(req, res, accountId) {
         accountId
       });
     }
+
+    // --- NEW: Prevent editing of seeded accounts ---
+    if (existingAccount.isSeeded) {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden',
+        message: 'System-defined accounts cannot be modified.'
+      });
+    }
+    // --- END NEW ---
 
     // Validation for critical changes
     if (type && type !== existingAccount.type) {
@@ -251,6 +286,32 @@ async function handlePut(req, res, accountId) {
       }
     }
 
+    // Validate opening balance if provided
+    if (openingBalance !== undefined && isNaN(parseFloat(openingBalance))) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid opening balance',
+        message: 'Opening balance must be a valid number'
+      });
+    }
+
+    // Validate boolean fields
+    if (canDebitOnPayment !== undefined && typeof canDebitOnPayment !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid canDebitOnPayment value',
+        message: 'canDebitOnPayment must be a boolean'
+      });
+    }
+
+    if (canCreditOnReceipt !== undefined && typeof canCreditOnReceipt !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid canCreditOnReceipt value',
+        message: 'canCreditOnReceipt must be a boolean'
+      });
+    }
+
     // Validate parent account if changing
     if (parentId !== undefined && parentId !== existingAccount.parentId) {
       if (parentId) {
@@ -304,6 +365,9 @@ async function handlePut(req, res, accountId) {
     if (parentId !== undefined) updateData.parentId = parentId ? parseInt(parentId) : null;
     if (description !== undefined) updateData.description = description;
     if (isActive !== undefined) updateData.isActive = isActive;
+    if (openingBalance !== undefined) updateData.openingBalance = parseFloat(openingBalance);
+    if (canDebitOnPayment !== undefined) updateData.canDebitOnPayment = canDebitOnPayment;
+    if (canCreditOnReceipt !== undefined) updateData.canCreditOnReceipt = canCreditOnReceipt;
 
     // Update the account
     const account = await prisma.account.update({
@@ -311,6 +375,8 @@ async function handlePut(req, res, accountId) {
       data: updateData,
       include: {
         parent: true,
+        supplier: true,
+        customer: true,
         children: {
           orderBy: { code: 'asc' }
         }
@@ -368,6 +434,16 @@ async function handleDelete(req, res, accountId) {
         accountId
       });
     }
+
+    // --- NEW: Prevent deleting of seeded accounts ---
+    if (account.isSeeded) {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden',
+        message: 'System-defined accounts cannot be deleted.'
+      });
+    }
+    // --- END NEW ---
 
     // Safety checks unless force is true
     if (!force) {
@@ -447,5 +523,6 @@ async function isDescendant(ancestorId, potentialDescendantId) {
     return true;
   }
 
+  // Recursively check parent's parent
   return await isDescendant(ancestorId, descendant.parentId);
 }

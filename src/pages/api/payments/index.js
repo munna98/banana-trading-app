@@ -1,5 +1,5 @@
 // pages/api/payments/index.js
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -8,23 +8,23 @@ export default async function handler(req, res) {
 
   try {
     switch (method) {
-      case 'GET':
+      case "GET":
         return await handleGet(req, res);
-      case 'POST':
+      case "POST":
         return await handlePost(req, res);
       default:
-        res.setHeader('Allow', ['GET', 'POST']);
+        res.setHeader("Allow", ["GET", "POST"]);
         return res.status(405).json({
           error: `Method ${method} not allowed`,
-          allowedMethods: ['GET', 'POST'],
-          message: 'Use /api/payments/[id] for individual payment operations'
+          allowedMethods: ["GET", "POST"],
+          message: "Use /api/payments/[id] for individual payment operations",
         });
     }
   } catch (error) {
-    console.error('API Error:', error);
+    console.error("API Error:", error);
     return res.status(500).json({
-      error: 'Internal server error',
-      message: error.message
+      error: "Internal server error",
+      message: error.message,
     });
   } finally {
     await prisma.$disconnect();
@@ -41,7 +41,7 @@ async function handleGet(req, res) {
     endDate,
     page = 1,
     limit = 50,
-    includeDetails = 'true'
+    includeDetails = "true",
   } = req.query;
 
   try {
@@ -71,27 +71,30 @@ async function handleGet(req, res) {
     }
 
     // Build include clause
-    const include = includeDetails === 'true' ? {
-      supplier: true,
-      purchase: {
-        include: {
-          items: {
-            include: {
-              item: true
-            }
+    const include =
+      includeDetails === "true"
+        ? {
+            supplier: true,
+            purchase: {
+              include: {
+                items: {
+                  include: {
+                    item: true,
+                  },
+                },
+              },
+            },
+            transaction: {
+              include: {
+                entries: {
+                  include: {
+                    account: true,
+                  },
+                },
+              },
+            },
           }
-        }
-      },
-      transaction: {
-        include: {
-          entries: {
-            include: {
-              account: true
-            }
-          }
-        }
-      }
-    } : {};
+        : {};
 
     // Pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -100,11 +103,11 @@ async function handleGet(req, res) {
       prisma.payment.findMany({
         where,
         include,
-        orderBy: { date: 'desc' },
+        orderBy: { date: "desc" },
         skip,
-        take: parseInt(limit)
+        take: parseInt(limit),
       }),
-      prisma.payment.count({ where })
+      prisma.payment.count({ where }),
     ]);
 
     return res.status(200).json({
@@ -114,16 +117,15 @@ async function handleGet(req, res) {
         total,
         page: parseInt(page),
         limit: parseInt(limit),
-        totalPages: Math.ceil(total / parseInt(limit))
-      }
+        totalPages: Math.ceil(total / parseInt(limit)),
+      },
     });
-
   } catch (error) {
-    console.error('GET Error:', error);
+    console.error("GET Error:", error);
     return res.status(500).json({
       success: false,
-      error: 'Failed to fetch payments',
-      message: error.message
+      error: "Failed to fetch payments",
+      message: error.message,
     });
   }
 }
@@ -138,31 +140,31 @@ async function handlePost(req, res) {
     reference,
     notes,
     date,
-    debitAccountId
+    debitAccountId,
   } = req.body;
 
   // Validation
   if (!amount || amount <= 0) {
     return res.status(400).json({
       success: false,
-      error: 'Invalid amount',
-      message: 'Amount must be greater than 0'
+      error: "Invalid amount",
+      message: "Amount must be greater than 0",
     });
   }
 
   if (!debitAccountId) {
     return res.status(400).json({
       success: false,
-      error: 'Missing debit account',
-      message: 'Debit account ID is required'
+      error: "Missing debit account",
+      message: "Debit account ID is required",
     });
   }
 
   if (!paymentMethod) {
     return res.status(400).json({
       success: false,
-      error: 'Missing payment method',
-      message: 'Payment method is required'
+      error: "Missing payment method",
+      message: "Payment method is required",
     });
   }
 
@@ -172,21 +174,21 @@ async function handlePost(req, res) {
       // Verify debit account exists and is active
       const debitAccount = await tx.account.findUnique({
         where: { id: parseInt(debitAccountId) },
-        include: { supplier: true }
+        include: { supplier: true },
       });
 
       if (!debitAccount || !debitAccount.isActive) {
-        throw new Error('Invalid or inactive debit account');
+        throw new Error("Invalid or inactive debit account");
       }
 
       // If supplierId is provided, verify it exists
       let supplier = null;
       if (supplierId) {
         supplier = await tx.supplier.findUnique({
-          where: { id: parseInt(supplierId) }
+          where: { id: parseInt(supplierId) },
         });
         if (!supplier) {
-          throw new Error('Supplier not found');
+          throw new Error("Supplier not found");
         }
       }
 
@@ -195,18 +197,18 @@ async function handlePost(req, res) {
       if (purchaseId) {
         purchase = await tx.purchase.findUnique({
           where: { id: parseInt(purchaseId) },
-          include: { supplier: true }
+          include: { supplier: true },
         });
-        
+
         if (!purchase) {
-          throw new Error('Purchase not found');
+          throw new Error("Purchase not found");
         }
-        
+
         // If supplierId is provided, ensure purchase belongs to that supplier
         if (supplierId && purchase.supplierId !== parseInt(supplierId)) {
-          throw new Error('Purchase does not belong to the specified supplier');
+          throw new Error("Purchase does not belong to the specified supplier");
         }
-        
+
         // Use purchase's supplier if no supplierId was provided
         if (!supplierId) {
           supplier = purchase.supplier;
@@ -222,82 +224,90 @@ async function handlePost(req, res) {
           amount: parseFloat(amount),
           reference: reference || null,
           notes: notes || null,
-          date: date ? new Date(date) : new Date()
-        }
+          date: date ? new Date(date) : new Date(),
+        },
       });
 
       // Create transaction record
       const transaction = await tx.transaction.create({
         data: {
-          type: 'PAYMENT',
+          type: "PAYMENT",
           amount: parseFloat(amount),
-          description: `Payment ${payment.id} - ${paymentMethod}${supplier ? ` to ${supplier.name}` : ''}${purchase ? ` for Purchase #${purchase.id}` : ''}`,
+          description: `Payment ${payment.id} - ${paymentMethod}${
+            supplier ? ` to ${supplier.name}` : ""
+          }${purchase ? ` for Purchase #${purchase.id}` : ""}`,
           date: payment.date,
           referenceNo: reference || null,
           notes: notes || null,
-          paymentId: payment.id
-        }
+          paymentId: payment.id,
+        },
       });
 
       // Create transaction entries (double-entry bookkeeping)
       const entries = [];
 
       // Credit the debit account (reducing the balance for expense/liability accounts)
-      entries.push(await tx.transactionEntry.create({
-        data: {
-          transactionId: transaction.id,
-          accountId: parseInt(debitAccountId),
-          debitAmount: 0,
-          creditAmount: parseFloat(amount),
-          description: `Payment ${payment.id} - ${paymentMethod}`
-        }
-      }));
+      entries.push(
+        await tx.transactionEntry.create({
+          data: {
+            transactionId: transaction.id,
+            accountId: parseInt(debitAccountId),
+            debitAmount: 0,
+            creditAmount: parseFloat(amount),
+            description: `Payment ${payment.id} - ${paymentMethod}`,
+          },
+        })
+      );
 
       // Debit cash/bank account based on payment method
       let creditAccountId;
       switch (paymentMethod) {
-        case 'CASH':
-          // Find cash account
+        case "CASH":
+          // Find cash account by exact code or name
           const cashAccount = await tx.account.findFirst({
-            where: { 
-              code: { contains: 'CASH' },
-              type: 'ASSET',
-              isActive: true
-            }
+            where: {
+              code: "1111", // Using the exact code from your JSON
+              type: "ASSET",
+              isActive: true,
+            },
           });
           creditAccountId = cashAccount?.id;
           break;
-        case 'BANK_TRANSFER':
-        case 'CHEQUE':
-        case 'UPI':
-        case 'CARD':
-          // Find bank account
+        case "BANK_TRANSFER":
+        case "CHEQUE":
+        case "UPI":
+        case "CARD":
+          // Find bank account by exact code or name
           const bankAccount = await tx.account.findFirst({
-            where: { 
-              code: { contains: 'BANK' },
-              type: 'ASSET',
-              isActive: true
-            }
+            where: {
+              code: "1112", // Using the exact code from your JSON
+              type: "ASSET",
+              isActive: true,
+            },
           });
           creditAccountId = bankAccount?.id;
           break;
         default:
-          throw new Error('Invalid payment method');
+          throw new Error("Invalid payment method");
       }
 
       if (!creditAccountId) {
-        throw new Error(`No ${paymentMethod === 'CASH' ? 'cash' : 'bank'} account found`);
+        throw new Error(
+          `No ${paymentMethod === "CASH" ? "cash" : "bank"} account found`
+        );
       }
 
-      entries.push(await tx.transactionEntry.create({
-        data: {
-          transactionId: transaction.id,
-          accountId: creditAccountId,
-          debitAmount: parseFloat(amount),
-          creditAmount: 0,
-          description: `Payment ${payment.id} - ${paymentMethod}`
-        }
-      }));
+      entries.push(
+        await tx.transactionEntry.create({
+          data: {
+            transactionId: transaction.id,
+            accountId: creditAccountId,
+            debitAmount: parseFloat(amount),
+            creditAmount: 0,
+            description: `Payment ${payment.id} - ${paymentMethod}`,
+          },
+        })
+      );
 
       // Update purchase paid amount if linked to a purchase
       if (purchase) {
@@ -305,9 +315,9 @@ async function handlePost(req, res) {
           where: { id: purchase.id },
           data: {
             paidAmount: {
-              increment: parseFloat(amount)
-            }
-          }
+              increment: parseFloat(amount),
+            },
+          },
         });
       }
 
@@ -320,36 +330,35 @@ async function handlePost(req, res) {
             include: {
               items: {
                 include: {
-                  item: true
-                }
-              }
-            }
+                  item: true,
+                },
+              },
+            },
           },
           transaction: {
             include: {
               entries: {
                 include: {
-                  account: true
-                }
-              }
-            }
-          }
-        }
+                  account: true,
+                },
+              },
+            },
+          },
+        },
       });
     });
 
     return res.status(201).json({
       success: true,
       data: result,
-      message: 'Payment recorded successfully'
+      message: "Payment recorded successfully",
     });
-
   } catch (error) {
-    console.error('POST Error:', error);
+    console.error("POST Error:", error);
     return res.status(500).json({
       success: false,
-      error: 'Failed to record payment',
-      message: error.message
+      error: "Failed to record payment",
+      message: error.message,
     });
   }
 }
