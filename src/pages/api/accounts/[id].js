@@ -12,7 +12,7 @@ export default async function handler(req, res) {
     return res.status(400).json({
       success: false,
       error: 'Invalid account ID',
-      message: 'Account ID must be a valid number'
+      message: 'Account ID must be a valid number',
     });
   }
 
@@ -30,7 +30,7 @@ export default async function handler(req, res) {
         res.setHeader('Allow', ['GET', 'PUT', 'DELETE']);
         return res.status(405).json({
           error: `Method ${method} not allowed`,
-          allowedMethods: ['GET', 'PUT', 'DELETE']
+          allowedMethods: ['GET', 'PUT', 'DELETE'],
         });
     }
   } catch (error) {
@@ -38,7 +38,7 @@ export default async function handler(req, res) {
     return res.status(500).json({
       success: false,
       error: 'Internal server error',
-      message: error.message
+      message: error.message,
     });
   } finally {
     await prisma.$disconnect();
@@ -52,9 +52,8 @@ async function handleGet(req, res, accountId) {
     includeParent,
     includeEntries,
     includeFullHierarchy,
-    includeBalance = 'true', // Parameter to control balance calculation
-    entriesLimit = 50
-  } = req.query;
+    entriesLimit = 50,
+  } = req.query; // Removed includeBalance here
 
   try {
     // Build include clause based on query parameters
@@ -64,13 +63,16 @@ async function handleGet(req, res, accountId) {
       include.children = {
         where: { isActive: true },
         orderBy: { code: 'asc' },
-        include: includeFullHierarchy === 'true' ? {
-          children: {
-            include: {
-              children: true // Support nested hierarchy
-            }
-          }
-        } : undefined
+        include:
+          includeFullHierarchy === 'true'
+            ? {
+                children: {
+                  include: {
+                    children: true, // Support nested hierarchy
+                  },
+                },
+              }
+            : undefined,
       };
     }
 
@@ -89,10 +91,10 @@ async function handleGet(req, res, accountId) {
               reference: true,
               date: true,
               type: true,
-              description: true
-            }
-          }
-        }
+              description: true,
+            },
+          },
+        },
       };
     }
 
@@ -102,14 +104,14 @@ async function handleGet(req, res, accountId) {
 
     const account = await prisma.account.findUnique({
       where: { id: accountId },
-      include
+      include,
     });
 
     if (!account) {
       return res.status(404).json({
         success: false,
         error: 'Account not found',
-        accountId
+        accountId,
       });
     }
 
@@ -119,18 +121,18 @@ async function handleGet(req, res, accountId) {
     // Count children if not included
     if (includeChildren !== 'true') {
       metadata.childrenCount = await prisma.account.count({
-        where: { parentId: accountId, isActive: true }
+        where: { parentId: accountId, isActive: true },
       });
     }
 
     // Count total entries if not included or limited
     if (includeEntries !== 'true') {
       metadata.entriesCount = await prisma.transactionEntry.count({
-        where: { accountId }
+        where: { accountId },
       });
     } else {
       const totalEntries = await prisma.transactionEntry.count({
-        where: { accountId }
+        where: { accountId },
       });
       if (parseInt(entriesLimit) < totalEntries) {
         metadata.totalEntries = totalEntries;
@@ -138,84 +140,54 @@ async function handleGet(req, res, accountId) {
       }
     }
 
-    // Calculate account balance only if requested (default: true)
-    if (includeBalance === 'true') {
-      const balanceResult = await prisma.transactionEntry.aggregate({
-        where: { accountId },
-        _sum: {
-          debitAmount: true,
-          creditAmount: true
-        }
-      });
-
-      const totalDebits = balanceResult._sum.debitAmount || 0;
-      const totalCredits = balanceResult._sum.creditAmount || 0;
-      
-      // Balance calculation depends on account type
-      let balance;
-      if (['ASSET', 'EXPENSE'].includes(account.type)) {
-        balance = totalDebits - totalCredits; // Debit balance accounts
-      } else {
-        balance = totalCredits - totalDebits; // Credit balance accounts
-      }
-
-      // Include opening balance in the calculation
-      const currentBalance = parseFloat(balance) + parseFloat(account.openingBalance || 0);
-
-      metadata.balance = {
-        current: currentBalance,
-        opening: parseFloat(account.openingBalance || 0),
-        transactionBalance: parseFloat(balance),
-        totalDebits: parseFloat(totalDebits),
-        totalCredits: parseFloat(totalCredits)
-      };
-    }
+    // Balance calculation is now handled by the separate /api/accounts/[id]/balance endpoint.
+    // The main account endpoint will no longer return balance by default to reduce overhead.
+    // If a client needs the balance, it should make a separate call.
 
     return res.status(200).json({
       success: true,
       data: account,
-      metadata
+      metadata, // metadata will no longer contain balance
     });
-
   } catch (error) {
     console.error('GET Error:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to fetch account',
-      message: error.message
+      message: error.message,
     });
   }
 }
 
 // PUT /api/accounts/[id] - Update a specific account
 async function handlePut(req, res, accountId) {
-  const { 
-    code, 
-    name, 
-    type, 
-    parentId, 
-    description, 
+  const {
+    code,
+    name,
+    type,
+    parentId,
+    description,
     isActive,
     openingBalance,
     canDebitOnPayment,
-    canCreditOnReceipt
+    canCreditOnReceipt,
   } = req.body;
 
   try {
     // Check if account exists
     const existingAccount = await prisma.account.findUnique({
       where: { id: accountId },
-      include: { 
+      include: {
         children: true,
-        entries: { take: 1 } // Just check if any entries exist
-      }
+        entries: { take: 1 }, // Just check if any entries exist
+      },
     });
 
     if (!existingAccount) {
       return res.status(404).json({
         success: false,
         error: 'Account not found',
-        accountId
+        accountId,
       });
     }
 
@@ -224,7 +196,7 @@ async function handlePut(req, res, accountId) {
       return res.status(403).json({
         success: false,
         error: 'Forbidden',
-        message: 'System-defined accounts cannot be modified.'
+        message: 'System-defined accounts cannot be modified.',
       });
     }
     // --- END NEW ---
@@ -235,23 +207,25 @@ async function handlePut(req, res, accountId) {
       if (existingAccount.entries.length > 0) {
         return res.status(400).json({
           success: false,
-          error: 'Cannot change account type when account has transaction entries'
+          error: 'Cannot change account type when account has transaction entries',
         });
       }
 
       // Check if children have incompatible types
       if (existingAccount.children.length > 0) {
-        const incompatibleChildren = existingAccount.children.filter(child => child.type !== type);
+        const incompatibleChildren = existingAccount.children.filter(
+          (child) => child.type !== type
+        );
         if (incompatibleChildren.length > 0) {
           return res.status(400).json({
             success: false,
             error: 'Cannot change account type when children have different types',
-            incompatibleChildren: incompatibleChildren.map(child => ({
+            incompatibleChildren: incompatibleChildren.map((child) => ({
               id: child.id,
               code: child.code,
               name: child.name,
-              type: child.type
-            }))
+              type: child.type,
+            })),
           });
         }
       }
@@ -262,7 +236,7 @@ async function handlePut(req, res, accountId) {
         return res.status(400).json({
           success: false,
           error: 'Invalid account type',
-          validTypes
+          validTypes,
         });
       }
     }
@@ -270,7 +244,7 @@ async function handlePut(req, res, accountId) {
     // If updating code, check for conflicts
     if (code && code !== existingAccount.code) {
       const codeConflict = await prisma.account.findUnique({
-        where: { code }
+        where: { code },
       });
 
       if (codeConflict) {
@@ -280,8 +254,8 @@ async function handlePut(req, res, accountId) {
           conflictingAccount: {
             id: codeConflict.id,
             code: codeConflict.code,
-            name: codeConflict.name
-          }
+            name: codeConflict.name,
+          },
         });
       }
     }
@@ -291,24 +265,30 @@ async function handlePut(req, res, accountId) {
       return res.status(400).json({
         success: false,
         error: 'Invalid opening balance',
-        message: 'Opening balance must be a valid number'
+        message: 'Opening balance must be a valid number',
       });
     }
 
     // Validate boolean fields
-    if (canDebitOnPayment !== undefined && typeof canDebitOnPayment !== 'boolean') {
+    if (
+      canDebitOnPayment !== undefined &&
+      typeof canDebitOnPayment !== 'boolean'
+    ) {
       return res.status(400).json({
         success: false,
         error: 'Invalid canDebitOnPayment value',
-        message: 'canDebitOnPayment must be a boolean'
+        message: 'canDebitOnPayment must be a boolean',
       });
     }
 
-    if (canCreditOnReceipt !== undefined && typeof canCreditOnReceipt !== 'boolean') {
+    if (
+      canCreditOnReceipt !== undefined &&
+      typeof canCreditOnReceipt !== 'boolean'
+    ) {
       return res.status(400).json({
         success: false,
         error: 'Invalid canCreditOnReceipt value',
-        message: 'canCreditOnReceipt must be a boolean'
+        message: 'canCreditOnReceipt must be a boolean',
       });
     }
 
@@ -316,14 +296,14 @@ async function handlePut(req, res, accountId) {
     if (parentId !== undefined && parentId !== existingAccount.parentId) {
       if (parentId) {
         const parentAccount = await prisma.account.findUnique({
-          where: { id: parseInt(parentId) }
+          where: { id: parseInt(parentId) },
         });
 
         if (!parentAccount) {
           return res.status(400).json({
             success: false,
             error: 'Parent account not found',
-            parentId
+            parentId,
           });
         }
 
@@ -331,7 +311,7 @@ async function handlePut(req, res, accountId) {
         if (parseInt(parentId) === accountId) {
           return res.status(400).json({
             success: false,
-            error: 'Account cannot be its own parent'
+            error: 'Account cannot be its own parent',
           });
         }
 
@@ -340,7 +320,7 @@ async function handlePut(req, res, accountId) {
         if (isChildOfCurrent) {
           return res.status(400).json({
             success: false,
-            error: 'Cannot create circular reference - proposed parent is a descendant of this account'
+            error: 'Cannot create circular reference - proposed parent is a descendant of this account',
           });
         }
 
@@ -351,7 +331,7 @@ async function handlePut(req, res, accountId) {
             success: false,
             error: 'Parent and child accounts must have the same type',
             parentType: parentAccount.type,
-            childType: accountType
+            childType: accountType,
           });
         }
       }
@@ -362,12 +342,16 @@ async function handlePut(req, res, accountId) {
     if (code !== undefined) updateData.code = code;
     if (name !== undefined) updateData.name = name;
     if (type !== undefined) updateData.type = type;
-    if (parentId !== undefined) updateData.parentId = parentId ? parseInt(parentId) : null;
+    if (parentId !== undefined)
+      updateData.parentId = parentId ? parseInt(parentId) : null;
     if (description !== undefined) updateData.description = description;
     if (isActive !== undefined) updateData.isActive = isActive;
-    if (openingBalance !== undefined) updateData.openingBalance = parseFloat(openingBalance);
-    if (canDebitOnPayment !== undefined) updateData.canDebitOnPayment = canDebitOnPayment;
-    if (canCreditOnReceipt !== undefined) updateData.canCreditOnReceipt = canCreditOnReceipt;
+    if (openingBalance !== undefined)
+      updateData.openingBalance = parseFloat(openingBalance);
+    if (canDebitOnPayment !== undefined)
+      updateData.canDebitOnPayment = canDebitOnPayment;
+    if (canCreditOnReceipt !== undefined)
+      updateData.canCreditOnReceipt = canCreditOnReceipt;
 
     // Update the account
     const account = await prisma.account.update({
@@ -378,31 +362,30 @@ async function handlePut(req, res, accountId) {
         supplier: true,
         customer: true,
         children: {
-          orderBy: { code: 'asc' }
-        }
-      }
+          orderBy: { code: 'asc' },
+        },
+      },
     });
 
     return res.status(200).json({
       success: true,
       data: account,
-      message: 'Account updated successfully'
+      message: 'Account updated successfully',
     });
-
   } catch (error) {
     console.error('PUT Error:', error);
 
     if (error.code === 'P2002') {
       return res.status(409).json({
         success: false,
-        error: 'Account code already exists'
+        error: 'Account code already exists',
       });
     }
 
     return res.status(500).json({
       success: false,
       error: 'Failed to update account',
-      message: error.message
+      message: error.message,
     });
   }
 }
@@ -421,17 +404,17 @@ async function handleDelete(req, res, accountId) {
         _count: {
           select: {
             children: true,
-            entries: true
-          }
-        }
-      }
+            entries: true,
+          },
+        },
+      },
     });
 
     if (!account) {
       return res.status(404).json({
         success: false,
         error: 'Account not found',
-        accountId
+        accountId,
       });
     }
 
@@ -440,7 +423,7 @@ async function handleDelete(req, res, accountId) {
       return res.status(403).json({
         success: false,
         error: 'Forbidden',
-        message: 'System-defined accounts cannot be deleted.'
+        message: 'System-defined accounts cannot be deleted.',
       });
     }
     // --- END NEW ---
@@ -453,11 +436,11 @@ async function handleDelete(req, res, accountId) {
           error: 'Cannot delete account with child accounts',
           childrenCount: account._count.children,
           suggestion: 'Delete or reassign child accounts first, or use force=true',
-          children: account.children.map(child => ({
+          children: account.children.map((child) => ({
             id: child.id,
             code: child.code,
-            name: child.name
-          }))
+            name: child.name,
+          })),
         });
       }
 
@@ -466,7 +449,8 @@ async function handleDelete(req, res, accountId) {
           success: false,
           error: 'Cannot delete account with transaction entries',
           entriesCount: account._count.entries,
-          suggestion: 'This account has transaction history and should be deactivated instead of deleted'
+          suggestion:
+            'This account has transaction history and should be deactivated instead of deleted',
         });
       }
     }
@@ -476,13 +460,13 @@ async function handleDelete(req, res, accountId) {
       // Update children to have no parent (make them root accounts)
       await prisma.account.updateMany({
         where: { parentId: accountId },
-        data: { parentId: null }
+        data: { parentId: null },
       });
     }
 
     // Delete the account
     await prisma.account.delete({
-      where: { id: accountId }
+      where: { id: accountId },
     });
 
     return res.status(200).json({
@@ -491,19 +475,19 @@ async function handleDelete(req, res, accountId) {
       deletedAccount: {
         id: account.id,
         code: account.code,
-        name: account.name
+        name: account.name,
       },
-      ...(force && account._count.children > 0 && {
-        orphanedChildren: account._count.children
-      })
+      ...(force &&
+        account._count.children > 0 && {
+          orphanedChildren: account._count.children,
+        }),
     });
-
   } catch (error) {
     console.error('DELETE Error:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to delete account',
-      message: error.message
+      message: error.message,
     });
   }
 }
@@ -512,7 +496,7 @@ async function handleDelete(req, res, accountId) {
 async function isDescendant(ancestorId, potentialDescendantId) {
   const descendant = await prisma.account.findUnique({
     where: { id: potentialDescendantId },
-    select: { parentId: true }
+    select: { parentId: true },
   });
 
   if (!descendant || !descendant.parentId) {

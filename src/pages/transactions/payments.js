@@ -1,224 +1,99 @@
 // pages/transactions/payments.js
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
+import { usePaymentFormLogic } from "../../components/transactions/usePaymentFormLogic";
+import { paymentMethods, getReferencePlaceholder, isReferenceRequired } from "../../lib/payments";
 
 export default function MakePayment() {
   const router = useRouter();
-  const { supplierId: initialSupplierId, purchaseId: initialPurchaseId } =
-    router.query;
+  const { supplierId: initialSupplierId, purchaseId: initialPurchaseId } = router.query;
 
-  const [debitAccounts, setDebitAccounts] = useState([]);
-  const [purchases, setPurchases] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    purchaseId: initialPurchaseId ? parseInt(initialPurchaseId) : null,
-    paymentMethod: "CASH",
-    amount: "",
-    reference: "",
-    notes: "",
-    date: new Date().toISOString().split("T")[0],
-    debitAccountId: "",
-  });
-  const [selectedDebitAccountBalance, setSelectedDebitAccountBalance] =
-    useState(0);
-  const [selectedPurchaseBalance, setSelectedPurchaseBalance] = useState(0);
+  const [globalError, setGlobalError] = useState(null); // For errors not tied to specific fields
 
-  const paymentMethods = [
-    { value: "CASH", label: "Cash", icon: "💵", requiresReference: false },
-    {
-      value: "BANK_TRANSFER",
-      label: "Bank Transfer",
-      icon: "🏦",
-      requiresReference: true,
-    },
-    { value: "CHEQUE", label: "Cheque", icon: "📄", requiresReference: true },
-    { value: "UPI", label: "UPI", icon: "📱", requiresReference: true },
-    { value: "CARD", label: "Card", icon: "💳", requiresReference: true },
-  ];
+  const {
+    formData,
+    setFormData,
+    debitAccounts,
+    purchases,
+    selectedDebitAccountDetails, // Now contains the full balance API response
+    selectedPurchaseBalance,
+    accountsLoading,
+    purchasesLoading,
+    getSupplierIdFromAccount,
+    handleDebitAccountChange,
+    handlePurchaseChange,
+    handleChange,
+  } = usePaymentFormLogic(initialSupplierId, initialPurchaseId, setGlobalError);
 
-  // Helper to find supplier linked to an account (now uses account.supplier.id from API)
-  // This helper is still useful for explicitly getting the supplier ID from a debitAccount ID
-  const getSupplierIdFromAccount = useCallback(
-    (accountId) => {
-      const account = debitAccounts.find((acc) => acc.id === accountId);
-      return account?.supplier?.id || null; // Access supplier.id directly from the fetched account object
-    },
-    [debitAccounts]
+  const selectedDebitAccount = debitAccounts.find(
+    (acc) => acc.id === formData.debitAccountId
   );
+  const displaySupplierId = getSupplierIdFromAccount(formData.debitAccountId);
 
-  // Fetch initial data: Debit Accounts
+  // Display global errors
   useEffect(() => {
-    async function fetchInitialData() {
-      try {
-        const accountsResponse = await fetch(
-          "/api/accounts?canBeDebitedForPayments=true&limit=500"
-        );
-        const accountsData = await accountsResponse.json();
-        setDebitAccounts(accountsData.data || []);
-
-        if (
-          initialSupplierId &&
-          accountsData.data &&
-          accountsData.data.length > 0
-        ) {
-          const supplierAccount = accountsData.data.find(
-            (acc) => acc.supplier?.id === parseInt(initialSupplierId)
-          );
-          if (supplierAccount) {
-            setFormData((prev) => ({
-              ...prev,
-              debitAccountId: supplierAccount.id,
-            }));
-            const accountBalanceResponse = await fetch(
-              `/api/accounts/${supplierAccount.id}/balance`
-            );
-            const accountBalanceData = await accountBalanceResponse.json();
-            setSelectedDebitAccountBalance(accountBalanceData.balance || 0);
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching initial data:", error);
-      }
+    if (globalError) {
+      const errorDiv = document.createElement("div");
+      errorDiv.className =
+        "fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50";
+      errorDiv.textContent = globalError;
+      document.body.appendChild(errorDiv);
+      const timer = setTimeout(() => {
+        document.body.removeChild(errorDiv);
+        setGlobalError(null); // Clear the error after display
+      }, 5000);
+      return () => clearTimeout(timer);
     }
-
-    fetchInitialData();
-  }, [initialSupplierId]);
-
-  // *** REVISED useEffect for fetching purchases ***
-  useEffect(() => {
-    async function fetchPurchases() {
-      const currentSupplierId = getSupplierIdFromAccount(
-        formData.debitAccountId
-      );
-
-      if (currentSupplierId) {
-        try {
-          const response = await fetch(
-            `/api/purchases?supplierId=${currentSupplierId}&unpaidOnly=true`
-          );
-          const data = await response.json();
-          setPurchases(data);
-
-          if (initialPurchaseId && data.length > 0) {
-            const purchase = data.find(
-              (p) => p.id === parseInt(initialPurchaseId)
-            );
-            if (purchase) {
-              setFormData((prev) => ({ ...prev, purchaseId: purchase.id }));
-              setSelectedPurchaseBalance(
-                purchase ? purchase.totalAmount - purchase.paidAmount : 0
-              );
-            }
-          }
-        } catch (error) {
-          console.error("Error fetching purchases:", error);
-        }
-      } else {
-        setPurchases([]);
-        setSelectedPurchaseBalance(0);
-        setFormData((prev) => ({ ...prev, purchaseId: null }));
-      }
-    }
-
-    // Trigger fetchPurchases whenever debitAccountId changes
-    fetchPurchases();
-  }, [formData.debitAccountId, initialPurchaseId, getSupplierIdFromAccount]); // Add getSupplierIdFromAccount to dependencies
-
-  // Handle debit account selection
-  const handleDebitAccountChange = async (e) => {
-    const selectedAccountId = e.target.value ? parseInt(e.target.value) : "";
-    let accountBalance = 0;
-
-    if (selectedAccountId) {
-      const selectedAccount = debitAccounts.find(
-        (acc) => acc.id === selectedAccountId
-      );
-      if (selectedAccount) {
-        try {
-          const accountBalanceResponse = await fetch(
-            `/api/accounts/${selectedAccountId}`
-          );
-          const accountBalanceData = await accountBalanceResponse.json();
-          accountBalance = accountBalanceData.balance || 0;
-        } catch (error) {
-          console.error("Error fetching debit account balance:", error);
-        }
-      }
-    }
-
-    setFormData((prev) => ({
-      ...prev,
-      debitAccountId: selectedAccountId,
-      purchaseId: null, // Reset purchase when debit account changes
-    }));
-    setSelectedDebitAccountBalance(accountBalance);
-    setSelectedPurchaseBalance(0);
-  };
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  // Handle purchase selection
-  const handlePurchaseChange = (e) => {
-    const selectedId = e.target.value ? parseInt(e.target.value) : null;
-    setFormData((prev) => ({ ...prev, purchaseId: selectedId }));
-
-    if (selectedId) {
-      const purchase = purchases.find((p) => p.id === selectedId);
-      setSelectedPurchaseBalance(
-        purchase ? purchase.totalAmount - purchase.paidAmount : 0
-      );
-    } else {
-      setSelectedPurchaseBalance(0);
-    }
-  };
-
-  const getReferencePlaceholder = useCallback((method) => {
-    switch (method) {
-      case "CHEQUE":
-        return "Cheque number";
-      case "UPI":
-        return "Transaction ID";
-      case "BANK_TRANSFER":
-        return "Reference number";
-      case "CARD":
-        return "Last 4 digits";
-      default:
-        return "Reference";
-    }
-  }, []);
-
-  const isReferenceRequired = useCallback(() => {
-    const method = paymentMethods.find(
-      (m) => m.value === formData.paymentMethod
-    );
-    return method?.requiresReference || false;
-  }, [formData.paymentMethod]);
+  }, [globalError]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setGlobalError(null); // Clear previous errors
 
-    // Get the current supplierId based on the selected debit account
+    // Client-side validation
+    if (!formData.debitAccountId) {
+      setGlobalError("Please select an account.");
+      setLoading(false);
+      return;
+    }
+    const amount = parseFloat(formData.amount);
+    if (isNaN(amount) || amount <= 0) {
+      setGlobalError("Please enter a valid payment amount greater than zero.");
+      setLoading(false);
+      return;
+    }
+
+    // --- START: MODIFIED PAYMENT RESTRICTION LOGIC ---
+    if (selectedDebitAccountDetails) {
+      // For ASSET accounts: Restrict if payment exceeds available funds.
+      if (selectedDebitAccountDetails.type === 'ASSET' && amount > selectedDebitAccountDetails.availableForPayment) {
+        setGlobalError("Insufficient funds in the selected account.");
+        setLoading(false);
+        return;
+      }
+      // For LIABILITY accounts: No explicit restriction based on balance for outgoing payments.
+      // A payment to a liability account (which can include a supplier account)
+      // either reduces an amount owed (positive balance) or increases an advance paid (negative balance).
+      // In both scenarios, the payment is generally allowed as it's an action to the account.
+    }
+    // --- END: MODIFIED PAYMENT RESTRICTION LOGIC ---
+
+
     const currentSupplierId = getSupplierIdFromAccount(formData.debitAccountId);
 
     try {
-      if (!formData.debitAccountId || !formData.amount) {
-        throw new Error("Please select an account and enter an amount.");
-      }
-
       const response = await fetch("/api/payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
-          supplierId: currentSupplierId, // Pass the derived supplierId to the backend
+          supplierId: currentSupplierId,
           purchaseId: formData.purchaseId,
-          amount: parseFloat(formData.amount),
+          amount: amount, // Use parsed amount
           debitAccountId: parseInt(formData.debitAccountId),
         }),
       });
@@ -232,7 +107,6 @@ export default function MakePayment() {
 
         setTimeout(() => {
           document.body.removeChild(successDiv);
-          // Use the derived supplierId for redirection
           if (currentSupplierId) {
             router.push(`/suppliers/${currentSupplierId}`);
           } else {
@@ -245,23 +119,11 @@ export default function MakePayment() {
       }
     } catch (error) {
       console.error("Error recording payment:", error);
-      const errorDiv = document.createElement("div");
-      errorDiv.className =
-        "fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50";
-      errorDiv.textContent = "Error recording payment: " + error.message;
-      document.body.appendChild(errorDiv);
-      setTimeout(() => {
-        document.body.removeChild(errorDiv);
-      }, 3000);
+      setGlobalError("Error recording payment: " + error.message);
     } finally {
       setLoading(false);
     }
   };
-
-  const selectedDebitAccount = debitAccounts.find(
-    (acc) => acc.id === formData.debitAccountId
-  );
-  const displaySupplierId = getSupplierIdFromAccount(formData.debitAccountId); // Get it for conditional rendering
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-pink-50">
@@ -292,9 +154,7 @@ export default function MakePayment() {
                 <h1 className="text-3xl font-bold text-slate-900 mb-2">
                   Make Payment
                 </h1>
-                <p className="text-slate-600">
-                  Record a payment from an account
-                </p>
+                <p className="text-slate-600">Record a payment from an account</p>
               </div>
             </div>
           </div>
@@ -326,53 +186,63 @@ export default function MakePayment() {
                         />
                       </svg>
                     </div>
-                    <select
-                      id="debitAccountId"
-                      name="debitAccountId"
-                      value={formData.debitAccountId}
-                      onChange={handleDebitAccountChange}
-                      required
-                      className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition-colors duration-200 bg-slate-50 focus:bg-white text-slate-900"
-                    >
-                      <option value="">Choose an account...</option>
-                      {debitAccounts.map((account) => {
-                        return (
-                          <option key={account.id} value={account.id}>
-                            {account.name}{" "}
-                            {account.parent ? `(${account.parent.name})` : ""}
-                            {account.supplier
-                              ? ` (Supplier: ${account.supplier.name})`
-                              : ""}
-                          </option>
-                        );
-                      })}
-                    </select>
+                    {accountsLoading ? (
+                      <div className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl bg-slate-50 text-slate-900 animate-pulse">
+                        Loading accounts...
+                      </div>
+                    ) : (
+                      <select
+                        id="debitAccountId"
+                        name="debitAccountId"
+                        value={formData.debitAccountId}
+                        onChange={handleDebitAccountChange}
+                        required
+                        className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition-colors duration-200 bg-slate-50 focus:bg-white text-slate-900"
+                      >
+                        <option value="">Choose an account...</option>
+                        {debitAccounts.map((account) => {
+                          return (
+                            <option key={account.id} value={account.id}>
+                              {account.name}{" "}
+                              {account.parent ? `(${account.parent.name})` : ""}
+                              {account.supplier
+                                ? ` (Supplier: ${account.supplier.name})`
+                                : ""}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    )}
                   </div>
                 </div>
 
                 {/* Purchase Selection (Optional, only if the selected debit account is linked to a supplier) */}
-                {displaySupplierId &&
-                  purchases.length > 0 && ( // Use displaySupplierId here
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">
-                        Link to Purchase (Optional)
-                      </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <svg
-                            className="h-5 w-5 text-slate-400"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                            />
-                          </svg>
+                {displaySupplierId && (
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                      Link to Purchase (Optional)
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <svg
+                          className="h-5 w-5 text-slate-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                          />
+                        </svg>
+                      </div>
+                      {purchasesLoading ? (
+                        <div className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl bg-slate-50 text-slate-900 animate-pulse">
+                          Loading purchases...
                         </div>
+                      ) : (purchases.length > 0 ? (
                         <select
                           id="purchaseId"
                           name="purchaseId"
@@ -393,16 +263,15 @@ export default function MakePayment() {
                             </option>
                           ))}
                         </select>
-                      </div>
+                      ) : (
+                        <p className="text-sm text-slate-500 italic py-3 pl-10">
+                          No unpaid purchases found for this supplier.
+                        </p>
+                      )
+                      )}
                     </div>
-                  )}
-                {/* Message if supplier is selected but no purchases found */}
-                {displaySupplierId &&
-                  purchases.length === 0 && ( // Use displaySupplierId here
-                    <p className="text-sm text-slate-500 italic">
-                      No unpaid purchases found for this supplier.
-                    </p>
-                  )}
+                  </div>
+                )}
 
                 {/* Payment Method Selection */}
                 <div>
@@ -437,7 +306,7 @@ export default function MakePayment() {
                 </div>
 
                 {/* Reference Number (conditionally displayed) */}
-                {isReferenceRequired() && (
+                {isReferenceRequired(formData.paymentMethod) && (
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-2">
                       {getReferencePlaceholder(formData.paymentMethod)}{" "}
@@ -562,7 +431,11 @@ export default function MakePayment() {
                   <button
                     type="submit"
                     disabled={
-                      loading || !formData.debitAccountId || !formData.amount
+                      loading ||
+                      !formData.debitAccountId ||
+                      parseFloat(formData.amount) <= 0 ||
+                      // Only disable if it's an ASSET account and insufficient funds
+                      (selectedDebitAccountDetails?.type === 'ASSET' && parseFloat(formData.amount) > selectedDebitAccountDetails.availableForPayment)
                     }
                     className="flex-1 px-8 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-semibold rounded-xl hover:from-blue-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 focus:ring-2 focus:ring-blue-500"
                   >
@@ -617,11 +490,19 @@ export default function MakePayment() {
           {/* Sidebar - Payment Info */}
           <div className="space-y-6 lg:col-span-1">
             {/* Current Debit Account Balance Card */}
-            {selectedDebitAccount && ( // Use selectedDebitAccount for name
-              <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-2xl p-6 border border-red-200">
+            {selectedDebitAccountDetails && (
+              <div className={`rounded-2xl p-6 border ${
+                  selectedDebitAccountDetails.balanceType === 'negative' && selectedDebitAccountDetails.type !== 'LIABILITY' ? 'bg-red-50 to-red-100 border-red-200'
+                : selectedDebitAccountDetails.balanceType === 'liability' ? 'bg-orange-50 to-orange-100 border-orange-200'
+                : 'bg-green-50 to-green-100 border-green-200'
+              }`}>
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <div className="w-12 h-12 bg-red-500 rounded-xl flex items-center justify-center">
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                        selectedDebitAccountDetails.balanceType === 'negative' && selectedDebitAccountDetails.type !== 'LIABILITY' ? 'bg-red-500'
+                      : selectedDebitAccountDetails.balanceType === 'liability' ? 'bg-orange-500'
+                      : 'bg-green-500'
+                    }`}>
                       <svg
                         className="w-6 h-6 text-white"
                         fill="none"
@@ -638,12 +519,39 @@ export default function MakePayment() {
                     </div>
                   </div>
                   <div className="ml-4">
-                    <h3 className="text-sm font-medium text-red-900">
-                      {selectedDebitAccount.name} Balance
+                    <h3 className={`text-sm font-medium ${
+                        selectedDebitAccountDetails.balanceType === 'negative' && selectedDebitAccountDetails.type !== 'LIABILITY' ? 'text-red-900'
+                      : selectedDebitAccountDetails.balanceType === 'liability' ? 'text-orange-900'
+                      : 'text-green-900'
+                    }`}>
+                      {selectedDebitAccountDetails.accountName} Balance
                     </h3>
-                    <p className="text-2xl font-bold text-red-600">
-                      ₹{selectedDebitAccountBalance.toFixed(2)}
+                    <p className={`text-2xl font-bold ${
+                        selectedDebitAccountDetails.balanceType === 'negative' && selectedDebitAccountDetails.type !== 'LIABILITY' ? 'text-red-600'
+                      : selectedDebitAccountDetails.balanceType === 'liability' ? 'text-orange-600'
+                      : 'text-green-600'
+                    }`}>
+                      ₹{selectedDebitAccountDetails.displayBalance.toFixed(2)}
                     </p>
+                    {selectedDebitAccountDetails.balanceDescription && (
+                      <p className={`text-xs ${
+                          selectedDebitAccountDetails.balanceType === 'negative' && selectedDebitAccountDetails.type !== 'LIABILITY' ? 'text-red-700'
+                        : selectedDebitAccountDetails.balanceType === 'liability' ? 'text-orange-700'
+                        : 'text-green-700'
+                      }`}>
+                        {selectedDebitAccountDetails.balanceDescription}
+                      </p>
+                    )}
+                    {selectedDebitAccountDetails.warningMessage && (
+                      <p className="text-xs text-orange-700 mt-1">
+                        ⚠️ {selectedDebitAccountDetails.warningMessage}
+                      </p>
+                    )}
+                      {selectedDebitAccountDetails.contextMessage && (
+                      <p className="text-xs text-green-700 mt-1 italic">
+                        {selectedDebitAccountDetails.contextMessage}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -672,7 +580,7 @@ export default function MakePayment() {
                   </div>
                   <div className="ml-4">
                     <h3 className="text-sm font-medium text-orange-900">
-                      Purchase Balance
+                      Purchase Balance Due
                     </h3>
                     <p className="text-2xl font-bold text-orange-600">
                       ₹{selectedPurchaseBalance.toFixed(2)}
@@ -683,21 +591,21 @@ export default function MakePayment() {
             )}
 
             {/* Payment Preview */}
-            {formData.amount && formData.debitAccountId && (
-              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-6 border border-green-200">
-                <h3 className="text-lg font-semibold text-green-900 mb-4">
+            {formData.amount && formData.debitAccountId && selectedDebitAccountDetails && (
+              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-6 border border-blue-200">
+                <h3 className="text-lg font-semibold text-blue-900 mb-4">
                   Payment Summary
                 </h3>
                 <div className="space-y-3">
                   <div className="flex justify-between">
-                    <span className="text-green-700">Paying from:</span>
-                    <span className="font-semibold text-green-900">
-                      {selectedDebitAccount?.name} {/* Use optional chaining */}
+                    <span className="text-blue-700">Paying from:</span>
+                    <span className="font-semibold text-blue-900">
+                      {selectedDebitAccountDetails.accountName}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-green-700">Payment Method:</span>
-                    <span className="font-semibold text-green-900">
+                    <span className="text-blue-700">Payment Method:</span>
+                    <span className="font-semibold text-blue-900">
                       {
                         paymentMethods.find(
                           (m) => m.value === formData.paymentMethod
@@ -706,28 +614,28 @@ export default function MakePayment() {
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-green-700">Amount:</span>
-                    <span className="font-semibold text-green-900">
+                    <span className="text-blue-700">Amount:</span>
+                    <span className="font-semibold text-blue-900">
                       ₹{parseFloat(formData.amount || 0).toFixed(2)}
                     </span>
                   </div>
                   {formData.reference && (
                     <div className="flex justify-between">
-                      <span className="text-green-700">Reference:</span>
-                      <span className="font-semibold text-green-900">
+                      <span className="text-blue-700">Reference:</span>
+                      <span className="font-semibold text-blue-900">
                         {formData.reference}
                       </span>
                     </div>
                   )}
-                  <hr className="border-green-200" />
+                  <hr className="border-blue-200" />
                   <div className="flex justify-between">
-                    <span className="text-green-700 font-medium">
+                    <span className="text-blue-700 font-medium">
                       New Account Balance:
                     </span>
-                    <span className="font-bold text-green-900">
+                    <span className="font-bold text-blue-900">
                       ₹
                       {(
-                        selectedDebitAccountBalance -
+                        selectedDebitAccountDetails.accountingBalance -
                         parseFloat(formData.amount || 0)
                       ).toFixed(2)}
                     </span>
@@ -735,30 +643,6 @@ export default function MakePayment() {
                 </div>
               </div>
             )}
-
-            {/* Quick Tips */}
-            <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-6 border border-purple-200">
-              <h3 className="lg font-semibold text-purple-900 mb-4">
-                💡 Payment Tips
-              </h3>
-              <ul className="space-y-3 text-sm text-purple-700">
-                <li className="flex items-start">
-                  <span className="flex-shrink-0 w-2 h-2 bg-purple-400 rounded-full mt-2 mr-3"></span>
-                  Select the specific account for this payment (e.g., a
-                  supplier's dedicated payable account, or an expense account).
-                </li>
-                <li className="flex items-start">
-                  <span className="flex-shrink-0 w-2 h-2 bg-purple-400 rounded-full mt-2 mr-3"></span>
-                  If paying a supplier, you can optionally link it to a specific
-                  unpaid purchase.
-                </li>
-                <li className="flex items-start">
-                  <span className="flex-shrink-0 w-2 h-2 bg-purple-400 rounded-full mt-2 mr-3"></span>
-                  Reference numbers help track digital payments, but are
-                  optional.
-                </li>
-              </ul>
-            </div>
           </div>
         </div>
       </div>
