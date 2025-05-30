@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import AccountsSummaryCards from '../../components/accounts/AccountsSummaryCards';
 
 export default function AccountsList() {
   const [accounts, setAccounts] = useState([]);
@@ -9,7 +10,7 @@ export default function AccountsList() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedAccounts, setExpandedAccounts] = useState(new Set());
-  const [accountBalances, setAccountBalances] = useState(new Map());
+  // Removed accountBalances state as balance is no longer displayed directly in the list/chart
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -139,39 +140,11 @@ export default function AccountsList() {
     setExpandedAccounts(newExpanded);
   };
 
-  // Load account balance using direct API call
-  const loadAccountBalance = async (accountId) => {
-    if (accountBalances.has(accountId)) return; // Don't load if already loaded or loading
-
-    try {
-      setAccountBalances(prev => new Map(prev.set(accountId, { loading: true })));
-
-      const response = await fetch(`/api/accounts/${accountId}/balance`);
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to load balance');
-      }
-
-      if (data.success) {
-        setAccountBalances(prev => new Map(prev.set(accountId, data.data)));
-      } else {
-        throw new Error(data.message || 'Failed to load balance');
-      }
-    } catch (error) {
-      console.error('Error loading account balance:', error);
-      setAccountBalances(prev => new Map(prev.set(accountId, {
-        error: error.message || 'Failed to load'
-      })));
-    }
-  };
-
-  // Render account tree (recursive)
+  // Render account tree (recursive) - updated for ledger link
   const renderAccountTree = (account, level = 0) => {
     if (!account) return null;
     const hasChildren = account.children && account.children.length > 0;
     const isExpanded = expandedAccounts.has(account.id);
-    const balanceInfo = accountBalances.get(account.id);
 
     return (
       <div key={account.id} className="border-l-2 border-slate-200">
@@ -214,47 +187,17 @@ export default function AccountsList() {
           </div>
 
           <div className="flex items-center space-x-4 ml-4">
-            {balanceInfo ? (
-              balanceInfo.loading ? (
-                <div className="text-right">
-                  <span className="text-xs text-slate-500">Loading...</span>
-                </div>
-              ) : balanceInfo.error ? (
-                <div className="text-right">
-                  <span className="text-xs text-red-500">{balanceInfo.error}</span>
-                </div>
-              ) : (
-                <div className="text-right">
-                  <div className="text-sm font-semibold text-slate-900">
-                    ₹{Math.abs(balanceInfo.balance).toFixed(2)}
-                  </div>
-                  <div className="text-xs text-slate-500">
-                    {balanceInfo.balance >= 0 ?
-                      (['ASSET', 'EXPENSE'].includes(balanceInfo.accountType) ? 'Debit' : 'Credit') :
-                      (['ASSET', 'EXPENSE'].includes(balanceInfo.accountType) ? 'Credit' : 'Debit')
-                    }
-                  </div>
-                </div>
-              )
-            ) : (
-              <button
-                onClick={() => loadAccountBalance(account.id)}
-                className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-              >
-                Load Balance
-              </button>
-            )}
-
             <div className="flex space-x-2">
+              {/* Changed View to View Ledger */}
               <Link
-                href={`/accounts/${account.id}`}
+                href={`/accounts/${account.id}/ledger`}
                 className="inline-flex items-center px-3 py-1.5 bg-blue-100 text-blue-700 text-sm font-medium rounded-lg hover:bg-blue-200 transition-colors duration-150"
+                title="View Ledger"
               >
                 <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                 </svg>
-                View
+                View Ledger
               </Link>
               <Link
                 href={`/accounts/${account.id}/edit`}
@@ -361,104 +304,7 @@ export default function AccountsList() {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-          {/* Asset Card */}
-          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-6 border border-blue-200">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-12 h-12 bg-blue-500 rounded-xl flex items-center justify-center">
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                  </svg>
-                </div>
-              </div>
-              <div className="ml-4">
-                <h3 className="text-sm font-medium text-blue-900">Assets</h3>
-                <p className="text-2xl font-bold text-blue-600">{accountTypeTotals.ASSET || 0}</p>
-              </div>
-            </div>
-          </div>
-          {/* Liability Card */}
-          <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-2xl p-6 border border-red-200">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-12 h-12 bg-red-500 rounded-xl flex items-center justify-center">
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                  </svg>
-                </div>
-              </div>
-              <div className="ml-4">
-                <h3 className="text-sm font-medium text-red-900">Liabilities</h3>
-                <p className="text-2xl font-bold text-red-600">{accountTypeTotals.LIABILITY || 0}</p>
-              </div>
-            </div>
-          </div>
-          {/* Equity Card */}
-          <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-6 border border-purple-200">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-12 h-12 bg-purple-500 rounded-xl flex items-center justify-center">
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-              </div>
-              <div className="ml-4">
-                <h3 className="text-sm font-medium text-purple-900">Equity</h3>
-                <p className="text-2xl font-bold text-purple-600">{accountTypeTotals.EQUITY || 0}</p>
-              </div>
-            </div>
-          </div>
-          {/* Income Card */}
-          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-6 border border-green-200">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-12 h-12 bg-green-500 rounded-xl flex items-center justify-center">
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                  </svg>
-                </div>
-              </div>
-              <div className="ml-4">
-                <h3 className="text-sm font-medium text-green-900">Income</h3>
-                <p className="text-2xl font-bold text-green-600">{accountTypeTotals.INCOME || 0}</p>
-              </div>
-            </div>
-          </div>
-          {/* Expense Card */}
-          <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-2xl p-6 border border-orange-200">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-12 h-12 bg-orange-500 rounded-xl flex items-center justify-center">
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
-                  </svg>
-                </div>
-              </div>
-              <div className="ml-4">
-                <h3 className="text-sm font-medium text-orange-900">Expenses</h3>
-                <p className="text-2xl font-bold text-orange-600">{accountTypeTotals.EXPENSE || 0}</p>
-              </div>
-            </div>
-          </div>
-          {/* Total Card */}
-          <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-2xl p-6 border border-slate-200">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-12 h-12 bg-slate-500 rounded-xl flex items-center justify-center">
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                  </svg>
-                </div>
-              </div>
-              <div className="ml-4">
-                <h3 className="text-sm font-medium text-slate-900">Total</h3>
-                <p className="text-2xl font-bold text-slate-600">{accounts.length}</p>
-              </div>
-            </div>
-          </div>
-        </div>
+        <AccountsSummaryCards accountTypeTotals={accountTypeTotals} totalAccounts={accounts.length} />
 
         {/* View Toggle and Filter Section */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
@@ -597,9 +443,7 @@ export default function AccountsList() {
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                               Status
                             </th>
-                            <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
-                              Balance
-                            </th>
+                            {/* Removed the Balance column */}
                             <th scope="col" className="relative px-6 py-3">
                               <span className="sr-only">Actions</span>
                             </th>
@@ -607,7 +451,6 @@ export default function AccountsList() {
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-200">
                           {filteredAccounts.map(account => {
-                            const balanceInfo = accountBalances.get(account.id);
                             return (
                               <tr key={account.id} className="hover:bg-slate-50">
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
@@ -635,42 +478,17 @@ export default function AccountsList() {
                                     </span>
                                   )}
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-slate-900">
-                                  {balanceInfo ? (
-                                    balanceInfo.loading ? (
-                                      <span className="text-xs text-slate-500">Loading...</span>
-                                    ) : balanceInfo.error ? (
-                                      <span className="text-xs text-red-500">{balanceInfo.error}</span>
-                                    ) : (
-                                      <div className="font-semibold">
-                                        ₹{Math.abs(balanceInfo.balance).toFixed(2)}
-                                        <span className="ml-1 text-xs text-slate-500">
-                                          {balanceInfo.balance >= 0 ?
-                                            (['ASSET', 'EXPENSE'].includes(balanceInfo.accountType) ? 'Dr' : 'Cr') :
-                                            (['ASSET', 'EXPENSE'].includes(balanceInfo.accountType) ? 'Cr' : 'Dr')
-                                          }
-                                        </span>
-                                      </div>
-                                    )
-                                  ) : (
-                                    <button
-                                      onClick={() => loadAccountBalance(account.id)}
-                                      className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-                                    >
-                                      Load Balance
-                                    </button>
-                                  )}
-                                </td>
+                                {/* Removed the Balance cell */}
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                   <div className="flex justify-end space-x-2">
+                                    {/* Changed View to View Ledger */}
                                     <Link
-                                      href={`/accounts/${account.id}`}
+                                      href={`/accounts/${account.id}/ledger`}
                                       className="text-indigo-600 hover:text-indigo-900"
-                                      title="View"
+                                      title="View Ledger"
                                     >
                                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                                       </svg>
                                     </Link>
                                     <Link

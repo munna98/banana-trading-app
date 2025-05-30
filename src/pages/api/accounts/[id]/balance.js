@@ -82,6 +82,9 @@ export default async function handler(req, res) {
     // Include opening balance in the calculation
     const currentAccountingBalance = parseFloat(accountingBalance) + parseFloat(account.openingBalance || 0);
 
+    // Determine balance type (debit or credit)
+    const balanceTypeInfo = getBalanceType(account, currentAccountingBalance);
+
     // Determine user-friendly balance and context
     const balanceInfo = getUserFriendlyBalance(account, currentAccountingBalance, context);
 
@@ -97,6 +100,9 @@ export default async function handler(req, res) {
       transactionBalance: parseFloat(accountingBalance.toFixed(2)),
       totalDebits: parseFloat(totalDebits.toFixed(2)),
       totalCredits: parseFloat(totalCredits.toFixed(2)),
+      
+      // Balance type information
+      ...balanceTypeInfo,
       
       // User-friendly balance information
       ...balanceInfo,
@@ -119,6 +125,39 @@ export default async function handler(req, res) {
   } finally {
     await prisma.$disconnect();
   }
+}
+
+/**
+ * Determine if the account has a debit or credit balance
+ */
+function getBalanceType(account, accountingBalance) {
+  let balanceNature;
+  let hasNormalBalance;
+  
+  // Determine the normal balance type for this account type
+  const normalDebitAccounts = ['ASSET', 'EXPENSE'];
+  const normalCreditAccounts = ['LIABILITY', 'INCOME', 'EQUITY'];
+  
+  if (normalDebitAccounts.includes(account.type)) {
+    // These accounts normally have debit balances
+    balanceNature = accountingBalance >= 0 ? 'debit' : 'credit';
+    hasNormalBalance = accountingBalance >= 0;
+  } else if (normalCreditAccounts.includes(account.type)) {
+    // These accounts normally have credit balances
+    balanceNature = accountingBalance >= 0 ? 'credit' : 'debit';
+    hasNormalBalance = accountingBalance >= 0;
+  } else {
+    // Fallback for unknown account types
+    balanceNature = accountingBalance >= 0 ? 'credit' : 'debit';
+    hasNormalBalance = true;
+  }
+
+  return {
+    balanceNature,
+    hasNormalBalance,
+    absoluteBalance: Math.abs(accountingBalance),
+    isZeroBalance: accountingBalance === 0
+  };
 }
 
 /**
