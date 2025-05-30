@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 
-// Define PaymentMethodType enum for client-side use
 const PaymentMethodType = {
   CASH: 'CASH',
   BANK_TRANSFER: 'BANK_TRANSFER',
@@ -21,7 +20,7 @@ export default function AddPurchase() {
     supplierId: '',
     date: new Date().toISOString().split('T')[0],
     items: [],
-    payments: [], // Changed to an array to hold multiple payments
+    payments: [],
   });
   const [errors, setErrors] = useState({});
 
@@ -32,16 +31,16 @@ export default function AddPurchase() {
     numberOfBunches: '',
   });
 
-  const [newPayment, setNewPayment] = useState({ // State for new payment entry
+  const [newPayment, setNewPayment] = useState({
     amount: '',
-    method: PaymentMethodType.CASH, // Default to CASH
+    method: PaymentMethodType.CASH,
     reference: '',
   });
 
   const [editingIndex, setEditingIndex] = useState(null);
-  const [editingPaymentIndex, setEditingPaymentIndex] = useState(null); // New state for editing payments
+  const [editingPaymentIndex, setEditingPaymentIndex] = useState(null);
 
-  // Refs for input fields to handle "Enter" key navigation
+  // Refs for input fields
   const supplierRef = useRef(null);
   const dateRef = useRef(null);
   const itemSelectRef = useRef(null);
@@ -49,28 +48,35 @@ export default function AddPurchase() {
   const rateRef = useRef(null);
   const numberOfBunchesRef = useRef(null);
   const addItemButtonRef = useRef(null);
-
-  // New refs for payment section
   const paymentAmountRef = useRef(null);
-  const paymentMethodRef = useRef(null);
   const paymentReferenceRef = useRef(null);
-  const addPaymentButtonRef = useRef(null);
-
   const submitButtonRef = useRef(null);
 
+  // Payment method refs
+  const paymentMethodRefs = {
+    [PaymentMethodType.CASH]: useRef(null),
+    [PaymentMethodType.BANK_TRANSFER]: useRef(null),
+    [PaymentMethodType.CHEQUE]: useRef(null),
+    [PaymentMethodType.UPI]: useRef(null),
+    [PaymentMethodType.CARD]: useRef(null),
+  };
 
-  // Fetch suppliers and items from your API
   useEffect(() => {
     const fetchSuppliersAndItems = async () => {
       try {
-        const supplierRes = await fetch('/api/suppliers');
-        const itemRes = await fetch('/api/items');
+        const [supplierRes, itemRes] = await Promise.all([
+          fetch('/api/suppliers'),
+          fetch('/api/items')
+        ]);
 
-        if (!supplierRes.ok) throw new Error('Failed to fetch suppliers');
-        if (!itemRes.ok) throw new Error('Failed to fetch items');
+        if (!supplierRes.ok || !itemRes.ok) {
+          throw new Error('Failed to fetch data');
+        }
 
-        const supplierData = await supplierRes.json();
-        const itemData = await itemRes.json();
+        const [supplierData, itemData] = await Promise.all([
+          supplierRes.json(),
+          itemRes.json()
+        ]);
 
         setSuppliers(supplierData.suppliers || []);
         setItems(itemData.data || []);
@@ -93,12 +99,9 @@ export default function AddPurchase() {
     const { name, value } = e.target;
     setNewItem(prev => ({ ...prev, [name]: value }));
 
-    // If item is selected, pre-fill the rate (assuming it's a purchase rate now, not salesRate)
-    // IMPORTANT: Make sure your Item model has a 'purchaseRate' or similar field
     if (name === 'itemId') {
       const selectedItem = items.find(i => i.id === parseInt(value));
       if (selectedItem) {
-        // Assuming 'purchaseRate' or similar exists on the Item model
         setNewItem(prev => ({ ...prev, rate: selectedItem.purchaseRate?.toString() || '' }));
       } else {
         setNewItem(prev => ({ ...prev, rate: '' }));
@@ -137,7 +140,7 @@ export default function AddPurchase() {
       const quantity = parseFloat(newItem.quantity);
       const rate = parseFloat(newItem.rate);
       const numberOfBunches = parseInt(newItem.numberOfBunches || 0);
-      const weightDeduction = numberOfBunches * 1.5; // Calculate weight deduction based on 1.5kg per bunch
+      const weightDeduction = numberOfBunches * 1.5;
       const effectiveQuantity = quantity - weightDeduction;
       const amount = effectiveQuantity * rate;
 
@@ -154,24 +157,19 @@ export default function AddPurchase() {
       };
 
       if (editingIndex !== null) {
-        // Update existing item
         const updatedItems = [...formData.items];
         updatedItems[editingIndex] = newItemData;
-        setFormData(prev => ({
-          ...prev,
-          items: updatedItems
-        }));
-        setEditingIndex(null); // Clear editing state
+        setFormData(prev => ({ ...prev, items: updatedItems }));
+        setEditingIndex(null);
       } else {
-        // Add new item
         setFormData(prev => ({
           ...prev,
           items: [...prev.items, newItemData]
         }));
       }
 
-      setNewItem({ itemId: '', quantity: '', rate: '', numberOfBunches: '' }); // Reset for next item
-      itemSelectRef.current?.focus(); // Focus on item selection after adding/updating
+      setNewItem({ itemId: '', quantity: '', rate: '', numberOfBunches: '' });
+      itemSelectRef.current?.focus();
     }
   };
 
@@ -184,7 +182,7 @@ export default function AddPurchase() {
       numberOfBunches: itemToEdit.numberOfBunches.toString(),
     });
     setEditingIndex(index);
-    itemSelectRef.current?.focus(); // Focus on item selection for editing
+    itemSelectRef.current?.focus();
   };
 
   const cancelEdit = () => {
@@ -193,17 +191,14 @@ export default function AddPurchase() {
     itemSelectRef.current?.focus();
   };
 
-
   const removeItem = (index) => {
     setFormData(prev => ({
       ...prev,
       items: prev.items.filter((_, i) => i !== index)
     }));
-    // If the removed item was the one being edited, clear editing state
     if (editingIndex === index) {
       cancelEdit();
     } else if (editingIndex > index) {
-      // If an item before the edited item was removed, adjust editingIndex
       setEditingIndex(prev => prev - 1);
     }
   };
@@ -236,10 +231,7 @@ export default function AddPurchase() {
     if (editingPaymentIndex !== null) {
       const updatedPayments = [...formData.payments];
       updatedPayments[editingPaymentIndex] = newPaymentData;
-      setFormData(prev => ({
-        ...prev,
-        payments: updatedPayments,
-      }));
+      setFormData(prev => ({ ...prev, payments: updatedPayments }));
       setEditingPaymentIndex(null);
     } else {
       setFormData(prev => ({
@@ -247,7 +239,7 @@ export default function AddPurchase() {
         payments: [...prev.payments, newPaymentData]
       }));
     }
-    setNewPayment({ amount: '', method: PaymentMethodType.CASH, reference: '' }); // Reset for next payment
+    setNewPayment({ amount: '', method: PaymentMethodType.CASH, reference: '' });
     paymentAmountRef.current?.focus();
   };
 
@@ -288,10 +280,9 @@ export default function AddPurchase() {
     return formData.payments.reduce((sum, payment) => sum + payment.amount, 0);
   };
 
-  // Handle "Enter" key press for navigation
   const handleKeyDown = (e, nextFieldRef) => {
     if (e.key === 'Enter') {
-      e.preventDefault(); // Prevent form submission if it's the last input
+      e.preventDefault();
       nextFieldRef.current?.focus();
     }
   };
@@ -325,7 +316,7 @@ export default function AddPurchase() {
         rate: item.rate,
         weightDeduction: item.weightDeduction
       })),
-      payments: formData.payments, // Send the array of payments
+      payments: formData.payments,
     };
 
     try {
@@ -350,6 +341,76 @@ export default function AddPurchase() {
       alert('An unexpected error occurred. Please try again.');
     }
   };
+
+  // Payment Method Tabs Component
+  const PaymentMethodTabs = () => (
+    <div className="flex flex-wrap gap-2 mb-4">
+      {Object.values(PaymentMethodType).map(method => (
+        <label 
+          key={method}
+          className={`flex items-center px-4 py-2 rounded-lg cursor-pointer border transition-colors ${
+            newPayment.method === method 
+              ? 'bg-purple-100 border-purple-500 shadow-inner' 
+              : 'bg-slate-100 border-slate-300 hover:bg-slate-200'
+          }`}
+        >
+          <input
+            type="radio"
+            name="method"
+            value={method}
+            checked={newPayment.method === method}
+            onChange={handleNewPaymentChange}
+            className="sr-only"
+            ref={paymentMethodRefs[method]}
+          />
+          <span className="text-sm font-medium text-slate-800">
+            {method.replace('_', ' ')}
+          </span>
+        </label>
+      ))}
+    </div>
+  );
+
+  // Payment Card Component
+  const PaymentCard = ({ payment, index }) => (
+    <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+      <div className="flex justify-between items-start">
+        <div>
+          <div className="font-bold text-xl text-purple-700">₹{payment.amount.toFixed(2)}</div>
+          <div className="text-slate-700 font-medium mt-1">
+            {payment.method.replace('_', ' ')}
+          </div>
+          {payment.reference && (
+            <div className="text-slate-600 text-sm mt-1 truncate max-w-[200px]">
+              {payment.reference}
+            </div>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => editPayment(index)}
+            className="text-blue-600 hover:text-blue-800 p-1"
+            title="Edit Payment"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L15.232 5.232z" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => removePayment(index)}
+            className="text-red-600 hover:text-red-800 p-1"
+            title="Remove Payment"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-purple-50">
@@ -384,7 +445,6 @@ export default function AddPurchase() {
                   name="supplierId"
                   value={formData.supplierId}
                   onChange={handleInputChange}
-                  onKeyDown={(e) => handleKeyDown(e, dateRef)}
                   className={`w-full py-3 px-4 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white ${errors.supplierId ? 'border-red-500' : 'border-slate-300'}`}
                   required
                   ref={supplierRef}
@@ -405,7 +465,6 @@ export default function AddPurchase() {
                   name="date"
                   value={formData.date}
                   onChange={handleInputChange}
-                  onKeyDown={(e) => handleKeyDown(e, itemSelectRef)}
                   className="w-full py-3 px-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white"
                   required
                   ref={dateRef}
@@ -423,7 +482,6 @@ export default function AddPurchase() {
                   name="itemId"
                   value={newItem.itemId}
                   onChange={handleItemChange}
-                  onKeyDown={(e) => handleKeyDown(e, quantityRef)}
                   className={`w-full py-3 px-4 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white ${errors.currentItem?.itemId ? 'border-red-500' : 'border-slate-300'}`}
                   required
                   ref={itemSelectRef}
@@ -444,7 +502,6 @@ export default function AddPurchase() {
                   placeholder="e.g., 10"
                   value={newItem.quantity}
                   onChange={handleItemChange}
-                  onKeyDown={(e) => handleKeyDown(e, rateRef)}
                   min="0.01"
                   step="0.01"
                   className={`w-full py-3 px-4 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white ${errors.currentItem?.quantity ? 'border-red-500' : 'border-slate-300'}`}
@@ -462,7 +519,6 @@ export default function AddPurchase() {
                   placeholder="e.g., 25.50"
                   value={newItem.rate}
                   onChange={handleItemChange}
-                  onKeyDown={(e) => handleKeyDown(e, numberOfBunchesRef)}
                   min="0"
                   step="0.01"
                   className={`w-full py-3 px-4 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white ${errors.currentItem?.rate ? 'border-red-500' : 'border-slate-300'}`}
@@ -480,12 +536,6 @@ export default function AddPurchase() {
                   placeholder="e.g., 2"
                   value={newItem.numberOfBunches}
                   onChange={handleItemChange}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      addItemToList(); // Add/Update item on Enter
-                    }
-                  }}
                   min="0"
                   step="1"
                   className={`w-full py-3 px-4 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white ${errors.currentItem?.numberOfBunches ? 'border-red-500' : 'border-slate-300'}`}
@@ -577,151 +627,128 @@ export default function AddPurchase() {
               </div>
             )}
 
-            ---
-
             {/* Payment Section */}
-            <h3 className="text-xl font-semibold text-slate-900 mb-4">{editingPaymentIndex !== null ? 'Edit Payment' : 'Add Payment'}</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 items-end">
-              <div>
-                <label htmlFor="paymentAmount" className="block text-sm font-medium text-slate-700 mb-2">Amount <span className="text-red-500">*</span></label>
-                <input
-                  type="number"
-                  id="paymentAmount"
-                  name="amount"
-                  placeholder="e.g., 500.00"
-                  value={newPayment.amount}
-                  onChange={handleNewPaymentChange}
-                  onKeyDown={(e) => handleKeyDown(e, paymentMethodRef)}
-                  min="0.01"
-                  step="0.01"
-                  className={`w-full py-3 px-4 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white ${errors.currentPayment?.amount ? 'border-red-500' : 'border-slate-300'}`}
-                  ref={paymentAmountRef}
-                />
-                {errors.currentPayment?.amount && <p className="mt-1 text-sm text-red-600">{errors.currentPayment.amount}</p>}
-              </div>
-
-              <div>
-                <label htmlFor="paymentMethod" className="block text-sm font-medium text-slate-700 mb-2">Method <span className="text-red-500">*</span></label>
-                <select
-                  id="paymentMethod"
-                  name="method"
-                  value={newPayment.method}
-                  onChange={handleNewPaymentChange}
-                  onKeyDown={(e) => handleKeyDown(e, paymentReferenceRef)}
-                  className="w-full py-3 px-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white"
-                  ref={paymentMethodRef}
-                >
-                  {Object.values(PaymentMethodType).map(method => (
-                    <option key={method} value={method}>{method.replace('_', ' ')}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="paymentReference" className="block text-sm font-medium text-slate-700 mb-2">Reference (Optional)</label>
-                <input
-                  type="text"
-                  id="paymentReference"
-                  name="reference"
-                  placeholder="e.g., Cheque No. 123, UPI ID"
-                  value={newPayment.reference}
-                  onChange={handleNewPaymentChange}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      addPaymentToList();
-                    }
-                  }}
-                  className="w-full py-3 px-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white"
-                  ref={paymentReferenceRef}
-                />
-              </div>
-              <div className="md:col-span-3 flex gap-4">
-                <button
-                  type="button"
-                  onClick={addPaymentToList}
-                  className="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 bg-green-500 text-white font-semibold rounded-xl hover:bg-green-600 transition-all duration-200 shadow-md"
-                  ref={addPaymentButtonRef}
-                >
-                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={editingPaymentIndex !== null ? "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" : "M12 4v16m8-8H4"} />
-                  </svg>
-                  {editingPaymentIndex !== null ? 'Update Payment' : 'Add Payment'}
-                </button>
-                {editingPaymentIndex !== null && (
+            <div className="mt-8 border-t border-slate-200 pt-6">
+              <h3 className="text-xl font-semibold text-slate-900 mb-4">Payments</h3>
+              
+              {/* Payment Form */}
+              <div className="bg-slate-50 rounded-xl p-4 mb-6">
+                <h4 className="font-medium text-slate-700 mb-3">
+                  {editingPaymentIndex !== null ? 'Edit Payment' : 'Add Payment'}
+                </h4>
+                
+                <PaymentMethodTabs />
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="paymentAmount" className="block text-sm font-medium text-slate-700 mb-2">
+                      Amount <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      id="paymentAmount"
+                      name="amount"
+                      placeholder="e.g., 500.00"
+                      value={newPayment.amount}
+                      onChange={handleNewPaymentChange}
+                      className={`w-full py-3 px-4 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-white ${
+                        errors.currentPayment?.amount ? 'border-red-500' : 'border-slate-300'
+                      }`}
+                      ref={paymentAmountRef}
+                    />
+                    {errors.currentPayment?.amount && (
+                      <p className="mt-1 text-sm text-red-600">{errors.currentPayment.amount}</p>
+                    )}
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="paymentReference" className="block text-sm font-medium text-slate-700 mb-2">
+                      Reference (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      id="paymentReference"
+                      name="reference"
+                      placeholder="e.g., Cheque No. 123, UPI ID"
+                      value={newPayment.reference}
+                      onChange={handleNewPaymentChange}
+                      className="w-full py-3 px-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-white"
+                      ref={paymentReferenceRef}
+                    />
+                  </div>
+                </div>
+                
+                <div className="flex gap-4 mt-4">
                   <button
                     type="button"
-                    onClick={cancelPaymentEdit}
-                    className="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 bg-gray-300 text-gray-800 font-semibold rounded-xl hover:bg-gray-400 transition-all duration-200 shadow-md"
+                    onClick={addPaymentToList}
+                    className="inline-flex items-center justify-center px-5 py-2.5 bg-green-500 text-white font-medium rounded-lg hover:bg-green-600 transition-colors duration-200 shadow-sm"
                   >
-                    Cancel Edit
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={editingPaymentIndex !== null ? "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" : "M12 4v16m8-8H4"} />
+                    </svg>
+                    {editingPaymentIndex !== null ? 'Update Payment' : 'Add Payment'}
                   </button>
-                )}
+                  
+                  {editingPaymentIndex !== null && (
+                    <button
+                      type="button"
+                      onClick={cancelPaymentEdit}
+                      className="inline-flex items-center justify-center px-5 py-2.5 bg-slate-300 text-slate-700 font-medium rounded-lg hover:bg-slate-400 transition-colors duration-200 shadow-sm"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-
-            {/* Payment List Table */}
-            {formData.payments.length > 0 && (
-              <div className="mb-6 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                <table className="min-w-full divide-y divide-slate-200">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Amount</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Method</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Reference</th>
-                      <th className="px-6 py-3 text-center text-xs font-semibold text-slate-700 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-slate-200">
+              
+              {/* Payment Cards */}
+              {formData.payments.length > 0 ? (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
                     {formData.payments.map((payment, index) => (
-                      <tr key={index} className="hover:bg-slate-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">₹{payment.amount.toFixed(2)}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">{payment.method.replace('_', ' ')}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">{payment.reference || '-'}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center">
-                          <div className="flex items-center justify-center space-x-2">
-                            <button
-                              type="button"
-                              onClick={() => editPayment(index)}
-                              className="text-blue-600 hover:text-blue-900"
-                              title="Edit Payment"
-                            >
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L15.232 5.232z" />
-                              </svg>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => removePayment(index)}
-                              className="text-red-600 hover:text-red-900"
-                              title="Remove Payment"
-                            >
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                      <PaymentCard key={index} payment={payment} index={index} />
                     ))}
-                  </tbody>
-                </table>
-                <div className="bg-slate-50 px-6 py-4 flex justify-between items-center text-lg font-bold text-slate-900">
-                  <span>Total Paid:</span>
-                  <span>₹{calculateTotalPaidAmount().toFixed(2)}</span>
+                  </div>
+                  
+                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                    <div className="flex flex-wrap justify-between gap-4">
+                      <div className="flex-1 min-w-[200px]">
+                        <div className="text-slate-600 text-sm">Total Purchase</div>
+                        <div className="text-xl font-bold text-slate-900">₹{calculateTotalAmount().toFixed(2)}</div>
+                      </div>
+                      
+                      <div className="flex-1 min-w-[200px]">
+                        <div className="text-slate-600 text-sm">Total Paid</div>
+                        <div className="text-xl font-bold text-green-600">₹{calculateTotalPaidAmount().toFixed(2)}</div>
+                      </div>
+                      
+                      <div className="flex-1 min-w-[200px]">
+                        <div className="text-slate-600 text-sm">Amount Due</div>
+                        <div className={`text-xl font-bold ${
+                          (calculateTotalAmount() - calculateTotalPaidAmount()) > 0 
+                            ? 'text-red-600' 
+                            : 'text-green-600'
+                        }`}>
+                          ₹{(calculateTotalAmount() - calculateTotalPaidAmount()).toFixed(2)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-8 text-slate-500 border border-dashed border-slate-300 rounded-xl">
+                  <svg className="w-12 h-12 mx-auto text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="mt-4">No payments added yet</p>
                 </div>
-                <div className="bg-slate-100 px-6 py-4 flex justify-between items-center text-lg font-bold text-slate-900 border-t border-slate-200">
-                  <span>Amount Due:</span>
-                  <span className={`${(calculateTotalAmount() - calculateTotalPaidAmount()) > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    ₹{(calculateTotalAmount() - calculateTotalPaidAmount()).toFixed(2)}
-                  </span>
-                </div>
-              </div>
-            )}
+              )}
+            </div>
             {errors.payments && <p className="mb-4 text-sm text-red-600">{errors.payments}</p>}
 
             {/* Submit Button */}
-            <div className="flex justify-end">
+            <div className="flex justify-end mt-8">
               <button
                 type="submit"
                 className="inline-flex items-center justify-center px-8 py-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white font-semibold rounded-xl hover:from-purple-500 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
