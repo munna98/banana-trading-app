@@ -1,88 +1,66 @@
 // pages/purchases/add.js
+import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/router";
+import Link from "next/link";
+import ItemListTable from "../../components/purchases/ItemListTable";
+import PaymentMethodSelection from "../../components/transactions/PaymentMethodSelection";
 
-import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/router';
-import Link from 'next/link';
-
-const PaymentMethodType = {
-  CASH: 'CASH',
-  BANK_TRANSFER: 'BANK_TRANSFER',
-  CHEQUE: 'CHEQUE',
-  UPI: 'UPI',
-  CARD: 'CARD',
-};
-
+import {
+  paymentMethods,
+  getReferencePlaceholder,
+  isReferenceRequired,
+} from "../../lib/payments";
+import PaymentSection from "../../components/purchases/PaymentSection";
 export default function AddPurchase() {
   const router = useRouter();
   const [suppliers, setSuppliers] = useState([]);
   const [items, setItems] = useState([]);
   const [formData, setFormData] = useState({
-    supplierId: '',
-    date: new Date().toISOString().split('T')[0],
+    supplierId: "",
+    date: new Date().toISOString().split("T")[0],
     items: [],
     payments: [],
   });
   const [errors, setErrors] = useState({});
 
   const [newItem, setNewItem] = useState({
-    itemId: '',
-    quantity: '',
-    rate: '',
-    numberOfBunches: '',
+    itemId: "",
+    quantity: "",
+    rate: "",
+    numberOfBunches: "",
   });
 
   const [newPayment, setNewPayment] = useState({
-    amount: '',
-    method: PaymentMethodType.CASH,
-    reference: '',
+    amount: "",
+    method: paymentMethods[0]?.value || "CASH", // Default to the first payment method or 'CASH'
+    reference: "",
   });
 
   const [editingIndex, setEditingIndex] = useState(null);
   const [editingPaymentIndex, setEditingPaymentIndex] = useState(null);
 
   // Refs for input fields
-  const supplierRef = useRef(null);
-  const dateRef = useRef(null);
   const itemSelectRef = useRef(null);
-  const quantityRef = useRef(null);
-  const rateRef = useRef(null);
-  const numberOfBunchesRef = useRef(null);
-  const addItemButtonRef = useRef(null);
   const paymentAmountRef = useRef(null);
-  const paymentReferenceRef = useRef(null);
-  const submitButtonRef = useRef(null);
 
-  // Payment method refs
-  const paymentMethodRefs = {
-    [PaymentMethodType.CASH]: useRef(null),
-    [PaymentMethodType.BANK_TRANSFER]: useRef(null),
-    [PaymentMethodType.CHEQUE]: useRef(null),
-    [PaymentMethodType.UPI]: useRef(null),
-    [PaymentMethodType.CARD]: useRef(null),
-  };
-
+  // Fetch suppliers and items from your API
   useEffect(() => {
     const fetchSuppliersAndItems = async () => {
       try {
-        const [supplierRes, itemRes] = await Promise.all([
-          fetch('/api/suppliers'),
-          fetch('/api/items')
-        ]);
+        const supplierRes = await fetch("/api/suppliers");
+        const itemRes = await fetch("/api/items");
 
-        if (!supplierRes.ok || !itemRes.ok) {
-          throw new Error('Failed to fetch data');
-        }
+        if (!supplierRes.ok) throw new Error("Failed to fetch suppliers");
+        if (!itemRes.ok) throw new Error("Failed to fetch items");
 
-        const [supplierData, itemData] = await Promise.all([
-          supplierRes.json(),
-          itemRes.json()
-        ]);
+        const supplierData = await supplierRes.json();
+        const itemData = await itemRes.json();
 
         setSuppliers(supplierData.suppliers || []);
         setItems(itemData.data || []);
       } catch (error) {
-        console.error('Error fetching data:', error);
-        alert('Failed to load suppliers or items. Please try again.');
+        console.error("Error fetching data:", error);
+        alert("Failed to load suppliers or items. Please try again.");
       }
     };
 
@@ -91,56 +69,86 @@ export default function AddPurchase() {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    setErrors(prev => ({ ...prev, [name]: undefined }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    setErrors((prev) => ({ ...prev, [name]: undefined }));
   };
 
   const handleItemChange = (e) => {
     const { name, value } = e.target;
-    setNewItem(prev => ({ ...prev, [name]: value }));
+    setNewItem((prev) => ({ ...prev, [name]: value }));
 
-    if (name === 'itemId') {
-      const selectedItem = items.find(i => i.id === parseInt(value));
+    if (name === "itemId") {
+      const selectedItem = items.find((i) => i.id === parseInt(value));
       if (selectedItem) {
-        setNewItem(prev => ({ ...prev, rate: selectedItem.purchaseRate?.toString() || '' }));
+        setNewItem((prev) => ({
+          ...prev,
+          rate: selectedItem.purchaseRate?.toString() || "",
+        }));
       } else {
-        setNewItem(prev => ({ ...prev, rate: '' }));
+        setNewItem((prev) => ({ ...prev, rate: "" }));
       }
     }
   };
 
   const handleNewPaymentChange = (e) => {
     const { name, value } = e.target;
-    setNewPayment(prev => ({ ...prev, [name]: value }));
-    setErrors(prev => ({ ...prev, currentPayment: { ...prev.currentPayment, [name]: undefined } }));
+    setNewPayment((prev) => {
+      const updatedPayment = { ...prev, [name]: value };
+
+      // If method changes, reset reference if the new method doesn't require it
+      if (name === "method") {
+        const requiresRef = isReferenceRequired(value);
+        if (!requiresRef) {
+          updatedPayment.reference = "";
+        }
+      }
+      return updatedPayment;
+    });
+    setErrors((prev) => ({
+      ...prev,
+      currentPayment: { ...prev.currentPayment, [name]: undefined },
+    }));
   };
 
   const addItemToList = () => {
     const currentItemErrors = {};
-    if (!newItem.itemId) currentItemErrors.itemId = 'Select an item.';
-    if (!newItem.quantity || isNaN(parseFloat(newItem.quantity)) || parseFloat(newItem.quantity) <= 0) {
-      currentItemErrors.quantity = 'Positive quantity required.';
+    if (!newItem.itemId) currentItemErrors.itemId = "Select an item.";
+    if (
+      !newItem.quantity ||
+      isNaN(parseFloat(newItem.quantity)) ||
+      parseFloat(newItem.quantity) <= 0
+    ) {
+      currentItemErrors.quantity = "Positive quantity required.";
     }
-    if (!newItem.rate || isNaN(parseFloat(newItem.rate)) || parseFloat(newItem.rate) < 0) {
-      currentItemErrors.rate = 'Non-negative rate required.';
+    if (
+      !newItem.rate ||
+      isNaN(parseFloat(newItem.rate)) ||
+      parseFloat(newItem.rate) < 0
+    ) {
+      currentItemErrors.rate = "Non-negative rate required.";
     }
-    if (newItem.numberOfBunches !== '' && (isNaN(parseInt(newItem.numberOfBunches)) || parseInt(newItem.numberOfBunches) < 0)) {
-      currentItemErrors.numberOfBunches = 'Non-negative number of bunches required.';
+    if (
+      newItem.numberOfBunches !== "" &&
+      (isNaN(parseInt(newItem.numberOfBunches)) ||
+        parseInt(newItem.numberOfBunches) < 0)
+    ) {
+      currentItemErrors.numberOfBunches =
+        "Non-negative number of bunches required.";
     }
 
     if (Object.keys(currentItemErrors).length > 0) {
-      setErrors(prev => ({ ...prev, currentItem: currentItemErrors }));
+      setErrors((prev) => ({ ...prev, currentItem: currentItemErrors }));
       return;
     } else {
-      setErrors(prev => ({ ...prev, currentItem: undefined }));
+      setErrors((prev) => ({ ...prev, currentItem: undefined }));
     }
 
-    const itemInfo = items.find(i => i.id === parseInt(newItem.itemId));
+    const itemInfo = items.find((i) => i.id === parseInt(newItem.itemId));
     if (itemInfo) {
       const quantity = parseFloat(newItem.quantity);
       const rate = parseFloat(newItem.rate);
       const numberOfBunches = parseInt(newItem.numberOfBunches || 0);
-      const weightDeduction = numberOfBunches * 1.5;
+      const weightDeduction = numberOfBunches * 1.5; // Calculate weight deduction based on 1.5kg per bunch
       const effectiveQuantity = quantity - weightDeduction;
       const amount = effectiveQuantity * rate;
 
@@ -159,16 +167,19 @@ export default function AddPurchase() {
       if (editingIndex !== null) {
         const updatedItems = [...formData.items];
         updatedItems[editingIndex] = newItemData;
-        setFormData(prev => ({ ...prev, items: updatedItems }));
+        setFormData((prev) => ({
+          ...prev,
+          items: updatedItems,
+        }));
         setEditingIndex(null);
       } else {
-        setFormData(prev => ({
+        setFormData((prev) => ({
           ...prev,
-          items: [...prev.items, newItemData]
+          items: [...prev.items, newItemData],
         }));
       }
 
-      setNewItem({ itemId: '', quantity: '', rate: '', numberOfBunches: '' });
+      setNewItem({ itemId: "", quantity: "", rate: "", numberOfBunches: "" });
       itemSelectRef.current?.focus();
     }
   };
@@ -186,20 +197,20 @@ export default function AddPurchase() {
   };
 
   const cancelEdit = () => {
-    setNewItem({ itemId: '', quantity: '', rate: '', numberOfBunches: '' });
+    setNewItem({ itemId: "", quantity: "", rate: "", numberOfBunches: "" });
     setEditingIndex(null);
     itemSelectRef.current?.focus();
   };
 
   const removeItem = (index) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      items: prev.items.filter((_, i) => i !== index)
+      items: prev.items.filter((_, i) => i !== index),
     }));
     if (editingIndex === index) {
       cancelEdit();
     } else if (editingIndex > index) {
-      setEditingIndex(prev => prev - 1);
+      setEditingIndex((prev) => prev - 1);
     }
   };
 
@@ -210,16 +221,30 @@ export default function AddPurchase() {
     const totalPaidAmount = parseFloat(calculateTotalPaidAmount());
 
     if (!newPayment.amount || isNaN(paymentAmount) || paymentAmount <= 0) {
-      currentPaymentErrors.amount = 'Positive amount required.';
-    } else if (totalPaidAmount + paymentAmount > totalPurchaseAmount) {
-      currentPaymentErrors.amount = `Payment cannot exceed remaining amount (${(totalPurchaseAmount - totalPaidAmount).toFixed(2)}).`;
+      currentPaymentErrors.amount = "Positive amount required.";
+    } else if (
+      totalPaidAmount + paymentAmount > totalPurchaseAmount &&
+      editingPaymentIndex === null
+    ) {
+      // Only check against total if it's a new payment or the amount exceeds the total after editing
+      currentPaymentErrors.amount = `Payment cannot exceed remaining amount (${(
+        totalPurchaseAmount - totalPaidAmount
+      ).toFixed(2)}).`;
+    }
+
+    if (
+      isReferenceRequired(newPayment.method) &&
+      !newPayment.reference.trim()
+    ) {
+      currentPaymentErrors.reference =
+        "Reference is required for this payment method.";
     }
 
     if (Object.keys(currentPaymentErrors).length > 0) {
-      setErrors(prev => ({ ...prev, currentPayment: currentPaymentErrors }));
+      setErrors((prev) => ({ ...prev, currentPayment: currentPaymentErrors }));
       return;
     } else {
-      setErrors(prev => ({ ...prev, currentPayment: undefined }));
+      setErrors((prev) => ({ ...prev, currentPayment: undefined }));
     }
 
     const newPaymentData = {
@@ -231,15 +256,22 @@ export default function AddPurchase() {
     if (editingPaymentIndex !== null) {
       const updatedPayments = [...formData.payments];
       updatedPayments[editingPaymentIndex] = newPaymentData;
-      setFormData(prev => ({ ...prev, payments: updatedPayments }));
+      setFormData((prev) => ({
+        ...prev,
+        payments: updatedPayments,
+      }));
       setEditingPaymentIndex(null);
     } else {
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
-        payments: [...prev.payments, newPaymentData]
+        payments: [...prev.payments, newPaymentData],
       }));
     }
-    setNewPayment({ amount: '', method: PaymentMethodType.CASH, reference: '' });
+    setNewPayment({
+      amount: "",
+      method: paymentMethods[0]?.value || "CASH",
+      reference: "",
+    }); // Reset for next payment
     paymentAmountRef.current?.focus();
   };
 
@@ -248,27 +280,31 @@ export default function AddPurchase() {
     setNewPayment({
       amount: paymentToEdit.amount.toString(),
       method: paymentToEdit.method,
-      reference: paymentToEdit.reference || '',
+      reference: paymentToEdit.reference || "",
     });
     setEditingPaymentIndex(index);
     paymentAmountRef.current?.focus();
   };
 
   const cancelPaymentEdit = () => {
-    setNewPayment({ amount: '', method: PaymentMethodType.CASH, reference: '' });
+    setNewPayment({
+      amount: "",
+      method: paymentMethods[0]?.value || "CASH",
+      reference: "",
+    });
     setEditingPaymentIndex(null);
     paymentAmountRef.current?.focus();
   };
 
   const removePayment = (index) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      payments: prev.payments.filter((_, i) => i !== index)
+      payments: prev.payments.filter((_, i) => i !== index),
     }));
     if (editingPaymentIndex === index) {
       cancelPaymentEdit();
     } else if (editingPaymentIndex > index) {
-      setEditingPaymentIndex(prev => prev - 1);
+      setEditingPaymentIndex((prev) => prev - 1);
     }
   };
 
@@ -280,137 +316,69 @@ export default function AddPurchase() {
     return formData.payments.reduce((sum, payment) => sum + payment.amount, 0);
   };
 
-  const handleKeyDown = (e, nextFieldRef) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      nextFieldRef.current?.focus();
-    }
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     const newErrors = {};
-    if (!formData.supplierId) newErrors.supplierId = 'Supplier is required.';
-    if (formData.items.length === 0) newErrors.items = 'At least one item is required.';
+    if (!formData.supplierId) newErrors.supplierId = "Supplier is required.";
+    if (formData.items.length === 0)
+      newErrors.items = "At least one item is required.";
 
     const totalPurchaseAmount = calculateTotalAmount();
     const totalPaidAmount = calculateTotalPaidAmount();
 
     if (totalPaidAmount > totalPurchaseAmount) {
-      newErrors.payments = `Total paid amount (${totalPaidAmount.toFixed(2)}) cannot exceed total purchase amount (${totalPurchaseAmount.toFixed(2)}).`;
+      newErrors.payments = `Total paid amount (${totalPaidAmount.toFixed(
+        2
+      )}) cannot exceed total purchase amount (${totalPurchaseAmount.toFixed(
+        2
+      )}).`;
     }
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
-      alert('Please correct the form errors.');
+      alert("Please correct the form errors.");
       return;
     }
 
     const payload = {
       supplierId: parseInt(formData.supplierId),
       date: formData.date,
-      items: formData.items.map(item => ({
+      items: formData.items.map((item) => ({
         itemId: item.itemId,
         quantity: item.quantity,
         rate: item.rate,
-        weightDeduction: item.weightDeduction
+        weightDeduction: item.weightDeduction,
       })),
       payments: formData.payments,
     };
 
     try {
-      const res = await fetch('/api/purchases', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+      const res = await fetch("/api/purchases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
         const data = await res.json();
-        alert('Purchase created successfully!');
+        alert("Purchase created successfully!");
         router.push(`/purchases/${data.data.id}`);
       } else {
         const errorData = await res.json();
-        console.error('API Error:', errorData);
-        setErrors(errorData.errors || { general: errorData.message || 'Failed to create purchase.' });
-        alert('Error: ' + (errorData.message || 'Failed to create purchase.'));
+        console.error("API Error:", errorData);
+        setErrors(
+          errorData.errors || {
+            general: errorData.message || "Failed to create purchase.",
+          }
+        );
+        alert("Error: " + (errorData.message || "Failed to create purchase."));
       }
     } catch (error) {
-      console.error('Network or unexpected error:', error);
-      alert('An unexpected error occurred. Please try again.');
+      console.error("Network or unexpected error:", error);
+      alert("An unexpected error occurred. Please try again.");
     }
   };
-
-  // Payment Method Tabs Component
-  const PaymentMethodTabs = () => (
-    <div className="flex flex-wrap gap-2 mb-4">
-      {Object.values(PaymentMethodType).map(method => (
-        <label 
-          key={method}
-          className={`flex items-center px-4 py-2 rounded-lg cursor-pointer border transition-colors ${
-            newPayment.method === method 
-              ? 'bg-purple-100 border-purple-500 shadow-inner' 
-              : 'bg-slate-100 border-slate-300 hover:bg-slate-200'
-          }`}
-        >
-          <input
-            type="radio"
-            name="method"
-            value={method}
-            checked={newPayment.method === method}
-            onChange={handleNewPaymentChange}
-            className="sr-only"
-            ref={paymentMethodRefs[method]}
-          />
-          <span className="text-sm font-medium text-slate-800">
-            {method.replace('_', ' ')}
-          </span>
-        </label>
-      ))}
-    </div>
-  );
-
-  // Payment Card Component
-  const PaymentCard = ({ payment, index }) => (
-    <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
-      <div className="flex justify-between items-start">
-        <div>
-          <div className="font-bold text-xl text-purple-700">₹{payment.amount.toFixed(2)}</div>
-          <div className="text-slate-700 font-medium mt-1">
-            {payment.method.replace('_', ' ')}
-          </div>
-          {payment.reference && (
-            <div className="text-slate-600 text-sm mt-1 truncate max-w-[200px]">
-              {payment.reference}
-            </div>
-          )}
-        </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => editPayment(index)}
-            className="text-blue-600 hover:text-blue-800 p-1"
-            title="Edit Payment"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L15.232 5.232z" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            onClick={() => removePayment(index)}
-            className="text-red-600 hover:text-red-800 p-1"
-            title="Remove Payment"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-purple-50">
@@ -419,15 +387,29 @@ export default function AddPurchase() {
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-slate-900 mb-2">Add New Purchase</h1>
-              <p className="text-slate-600">Enter details to record a new purchase transaction.</p>
+              <h1 className="text-3xl font-bold text-slate-900 mb-2">
+                Add New Purchase
+              </h1>
+              <p className="text-slate-600">
+                Enter details to record a new purchase transaction.
+              </p>
             </div>
             <Link
               href="/purchases"
               className="inline-flex items-center justify-center px-6 py-3 bg-slate-200 text-slate-700 font-semibold rounded-xl hover:bg-slate-300 transition-all duration-200 shadow-sm"
             >
-              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              <svg
+                className="w-5 h-5 mr-2"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                />
               </svg>
               Back to Purchases
             </Link>
@@ -439,26 +421,43 @@ export default function AddPurchase() {
           <form onSubmit={handleSubmit}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               <div>
-                <label htmlFor="supplierId" className="block text-sm font-medium text-slate-700 mb-2">Supplier <span className="text-red-500">*</span></label>
+                <label
+                  htmlFor="supplierId"
+                  className="block text-sm font-medium text-slate-700 mb-2"
+                >
+                  Supplier <span className="text-red-500">*</span>
+                </label>
                 <select
                   id="supplierId"
                   name="supplierId"
                   value={formData.supplierId}
                   onChange={handleInputChange}
-                  className={`w-full py-3 px-4 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white ${errors.supplierId ? 'border-red-500' : 'border-slate-300'}`}
+                  className={`w-full py-3 px-4 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white ${
+                    errors.supplierId ? "border-red-500" : "border-slate-300"
+                  }`}
                   required
-                  ref={supplierRef}
                 >
                   <option value="">Select Supplier</option>
-                  {suppliers.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
                   ))}
                 </select>
-                {errors.supplierId && <p className="mt-1 text-sm text-red-600">{errors.supplierId}</p>}
+                {errors.supplierId && (
+                  <p className="mt-1 text-sm text-red-600">
+                    {errors.supplierId}
+                  </p>
+                )}
               </div>
 
               <div>
-                <label htmlFor="date" className="block text-sm font-medium text-slate-700 mb-2">Date <span className="text-red-500">*</span></label>
+                <label
+                  htmlFor="date"
+                  className="block text-sm font-medium text-slate-700 mb-2"
+                >
+                  Date <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="date"
                   id="date"
@@ -467,34 +466,54 @@ export default function AddPurchase() {
                   onChange={handleInputChange}
                   className="w-full py-3 px-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white"
                   required
-                  ref={dateRef}
                 />
               </div>
             </div>
-
             {/* Add/Edit Item Section */}
-            <h3 className="text-xl font-semibold text-slate-900 mb-4">{editingIndex !== null ? 'Edit Item' : 'Add Items'}</h3>
+            <h3 className="text-xl font-semibold text-slate-900 mb-4">
+              {editingIndex !== null ? "Edit Item" : "Add Items"}
+            </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 items-end">
               <div>
-                <label htmlFor="newItemId" className="block text-sm font-medium text-slate-700 mb-2">Item <span className="text-red-500">*</span></label>
+                <label
+                  htmlFor="newItemId"
+                  className="block text-sm font-medium text-slate-700 mb-2"
+                >
+                  Item <span className="text-red-500">*</span>
+                </label>
                 <select
                   id="newItemId"
                   name="itemId"
                   value={newItem.itemId}
                   onChange={handleItemChange}
-                  className={`w-full py-3 px-4 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white ${errors.currentItem?.itemId ? 'border-red-500' : 'border-slate-300'}`}
+                  ref={itemSelectRef} // Assign ref here
+                  className={`w-full py-3 px-4 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white ${
+                    errors.currentItem?.itemId
+                      ? "border-red-500"
+                      : "border-slate-300"
+                  }`}
                   required
-                  ref={itemSelectRef}
                 >
                   <option value="">Select Item</option>
-                  {items.map(item => (
-                    <option key={item.id} value={item.id}>{item.name}</option>
+                  {items.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
                   ))}
                 </select>
-                {errors.currentItem?.itemId && <p className="mt-1 text-sm text-red-600">{errors.currentItem.itemId}</p>}
+                {errors.currentItem?.itemId && (
+                  <p className="mt-1 text-sm text-red-600">
+                    {errors.currentItem.itemId}
+                  </p>
+                )}
               </div>
               <div>
-                <label htmlFor="newQuantity" className="block text-sm font-medium text-slate-700 mb-2">Quantity (Kg) <span className="text-red-500">*</span></label>
+                <label
+                  htmlFor="newQuantity"
+                  className="block text-sm font-medium text-slate-700 mb-2"
+                >
+                  Quantity (Kg) <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="number"
                   id="newQuantity"
@@ -504,14 +523,26 @@ export default function AddPurchase() {
                   onChange={handleItemChange}
                   min="0.01"
                   step="0.01"
-                  className={`w-full py-3 px-4 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white ${errors.currentItem?.quantity ? 'border-red-500' : 'border-slate-300'}`}
+                  className={`w-full py-3 px-4 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white ${
+                    errors.currentItem?.quantity
+                      ? "border-red-500"
+                      : "border-slate-300"
+                  }`}
                   required
-                  ref={quantityRef}
                 />
-                {errors.currentItem?.quantity && <p className="mt-1 text-sm text-red-600">{errors.currentItem.quantity}</p>}
+                {errors.currentItem?.quantity && (
+                  <p className="mt-1 text-sm text-red-600">
+                    {errors.currentItem.quantity}
+                  </p>
+                )}
               </div>
               <div>
-                <label htmlFor="newRate" className="block text-sm font-medium text-slate-700 mb-2">Rate (per unit) <span className="text-red-500">*</span></label>
+                <label
+                  htmlFor="newRate"
+                  className="block text-sm font-medium text-slate-700 mb-2"
+                >
+                  Rate (per unit) <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="number"
                   id="newRate"
@@ -521,14 +552,26 @@ export default function AddPurchase() {
                   onChange={handleItemChange}
                   min="0"
                   step="0.01"
-                  className={`w-full py-3 px-4 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white ${errors.currentItem?.rate ? 'border-red-500' : 'border-slate-300'}`}
+                  className={`w-full py-3 px-4 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white ${
+                    errors.currentItem?.rate
+                      ? "border-red-500"
+                      : "border-slate-300"
+                  }`}
                   required
-                  ref={rateRef}
                 />
-                {errors.currentItem?.rate && <p className="mt-1 text-sm text-red-600">{errors.currentItem.rate}</p>}
+                {errors.currentItem?.rate && (
+                  <p className="mt-1 text-sm text-red-600">
+                    {errors.currentItem.rate}
+                  </p>
+                )}
               </div>
               <div>
-                <label htmlFor="newNumberOfBunches" className="block text-sm font-medium text-slate-700 mb-2">No. of Bunches</label>
+                <label
+                  htmlFor="newNumberOfBunches"
+                  className="block text-sm font-medium text-slate-700 mb-2"
+                >
+                  No. of Bunches
+                </label>
                 <input
                   type="number"
                   id="newNumberOfBunches"
@@ -538,22 +581,42 @@ export default function AddPurchase() {
                   onChange={handleItemChange}
                   min="0"
                   step="1"
-                  className={`w-full py-3 px-4 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white ${errors.currentItem?.numberOfBunches ? 'border-red-500' : 'border-slate-300'}`}
-                  ref={numberOfBunchesRef}
+                  className={`w-full py-3 px-4 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white ${
+                    errors.currentItem?.numberOfBunches
+                      ? "border-red-500"
+                      : "border-slate-300"
+                  }`}
                 />
-                {errors.currentItem?.numberOfBunches && <p className="mt-1 text-sm text-red-600">{errors.currentItem.numberOfBunches}</p>}
+                {errors.currentItem?.numberOfBunches && (
+                  <p className="mt-1 text-sm text-red-600">
+                    {errors.currentItem.numberOfBunches}
+                  </p>
+                )}
               </div>
               <div className="lg:col-span-4 flex gap-4">
                 <button
                   type="button"
                   onClick={addItemToList}
                   className="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 bg-blue-500 text-white font-semibold rounded-xl hover:bg-blue-600 transition-all duration-200 shadow-md"
-                  ref={addItemButtonRef}
                 >
-                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={editingIndex !== null ? "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" : "M12 4v16m8-8H4"} />
+                  <svg
+                    className="w-5 h-5 mr-2"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d={
+                        editingIndex !== null
+                          ? "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                          : "M12 4v16m8-8H4"
+                      }
+                    />
                   </svg>
-                  {editingIndex !== null ? 'Update Item' : 'Add Item'}
+                  {editingIndex !== null ? "Update Item" : "Add Item"}
                 </button>
                 {editingIndex !== null && (
                   <button
@@ -566,196 +629,47 @@ export default function AddPurchase() {
                 )}
               </div>
             </div>
-            {errors.items && <p className="mb-4 text-sm text-red-600">{errors.items}</p>}
-
-            {/* Item List Table */}
-            {formData.items.length > 0 && (
-              <div className="mb-6 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                <table className="min-w-full divide-y divide-slate-200">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Item</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Quantity</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">No. of Bunches</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Net Weight</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Rate</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Amount</th>
-                      <th className="px-6 py-3 text-center text-xs font-semibold text-slate-700 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-slate-200">
-                    {formData.items.map((item, index) => (
-                      <tr key={index} className="hover:bg-slate-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{item.name}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">{item.quantity} {item.unit}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">{item.numberOfBunches}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700 font-semibold">{item.effectiveQuantity.toFixed(2)} {item.unit}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">₹{item.rate.toFixed(2)}/{item.unit}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 font-semibold">₹{item.amount.toFixed(2)}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center">
-                          <div className="flex items-center justify-center space-x-2">
-                            <button
-                              type="button"
-                              onClick={() => editItem(index)}
-                              className="text-blue-600 hover:text-blue-900"
-                              title="Edit Item"
-                            >
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L15.232 5.232z" />
-                              </svg>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => removeItem(index)}
-                              className="text-red-600 hover:text-red-900"
-                              title="Remove Item"
-                            >
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="bg-slate-50 px-6 py-4 flex justify-between items-center text-lg font-bold text-slate-900">
-                  <span>Grand Total:</span>
-                  <span>₹{calculateTotalAmount().toFixed(2)}</span>
-                </div>
-              </div>
+            {errors.items && (
+              <p className="mb-4 text-sm text-red-600">{errors.items}</p>
             )}
-
+            {/* Item List Table */}
+            <ItemListTable
+              items={formData.items}
+              editItem={editItem}
+              removeItem={removeItem}
+              calculateTotalAmount={calculateTotalAmount}
+            />
             {/* Payment Section */}
-            <div className="mt-8 border-t border-slate-200 pt-6">
-              <h3 className="text-xl font-semibold text-slate-900 mb-4">Payments</h3>
-              
-              {/* Payment Form */}
-              <div className="bg-slate-50 rounded-xl p-4 mb-6">
-                <h4 className="font-medium text-slate-700 mb-3">
-                  {editingPaymentIndex !== null ? 'Edit Payment' : 'Add Payment'}
-                </h4>
-                
-                <PaymentMethodTabs />
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label htmlFor="paymentAmount" className="block text-sm font-medium text-slate-700 mb-2">
-                      Amount <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      id="paymentAmount"
-                      name="amount"
-                      placeholder="e.g., 500.00"
-                      value={newPayment.amount}
-                      onChange={handleNewPaymentChange}
-                      className={`w-full py-3 px-4 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-white ${
-                        errors.currentPayment?.amount ? 'border-red-500' : 'border-slate-300'
-                      }`}
-                      ref={paymentAmountRef}
-                    />
-                    {errors.currentPayment?.amount && (
-                      <p className="mt-1 text-sm text-red-600">{errors.currentPayment.amount}</p>
-                    )}
-                  </div>
-                  
-                  <div>
-                    <label htmlFor="paymentReference" className="block text-sm font-medium text-slate-700 mb-2">
-                      Reference (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      id="paymentReference"
-                      name="reference"
-                      placeholder="e.g., Cheque No. 123, UPI ID"
-                      value={newPayment.reference}
-                      onChange={handleNewPaymentChange}
-                      className="w-full py-3 px-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-white"
-                      ref={paymentReferenceRef}
-                    />
-                  </div>
-                </div>
-                
-                <div className="flex gap-4 mt-4">
-                  <button
-                    type="button"
-                    onClick={addPaymentToList}
-                    className="inline-flex items-center justify-center px-5 py-2.5 bg-green-500 text-white font-medium rounded-lg hover:bg-green-600 transition-colors duration-200 shadow-sm"
-                  >
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={editingPaymentIndex !== null ? "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" : "M12 4v16m8-8H4"} />
-                    </svg>
-                    {editingPaymentIndex !== null ? 'Update Payment' : 'Add Payment'}
-                  </button>
-                  
-                  {editingPaymentIndex !== null && (
-                    <button
-                      type="button"
-                      onClick={cancelPaymentEdit}
-                      className="inline-flex items-center justify-center px-5 py-2.5 bg-slate-300 text-slate-700 font-medium rounded-lg hover:bg-slate-400 transition-colors duration-200 shadow-sm"
-                    >
-                      Cancel
-                    </button>
-                  )}
-                </div>
-              </div>
-              
-              {/* Payment Cards */}
-              {formData.payments.length > 0 ? (
-                <>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-                    {formData.payments.map((payment, index) => (
-                      <PaymentCard key={index} payment={payment} index={index} />
-                    ))}
-                  </div>
-                  
-                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-                    <div className="flex flex-wrap justify-between gap-4">
-                      <div className="flex-1 min-w-[200px]">
-                        <div className="text-slate-600 text-sm">Total Purchase</div>
-                        <div className="text-xl font-bold text-slate-900">₹{calculateTotalAmount().toFixed(2)}</div>
-                      </div>
-                      
-                      <div className="flex-1 min-w-[200px]">
-                        <div className="text-slate-600 text-sm">Total Paid</div>
-                        <div className="text-xl font-bold text-green-600">₹{calculateTotalPaidAmount().toFixed(2)}</div>
-                      </div>
-                      
-                      <div className="flex-1 min-w-[200px]">
-                        <div className="text-slate-600 text-sm">Amount Due</div>
-                        <div className={`text-xl font-bold ${
-                          (calculateTotalAmount() - calculateTotalPaidAmount()) > 0 
-                            ? 'text-red-600' 
-                            : 'text-green-600'
-                        }`}>
-                          ₹{(calculateTotalAmount() - calculateTotalPaidAmount()).toFixed(2)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="text-center py-8 text-slate-500 border border-dashed border-slate-300 rounded-xl">
-                  <svg className="w-12 h-12 mx-auto text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <p className="mt-4">No payments added yet</p>
-                </div>
-              )}
-            </div>
-            {errors.payments && <p className="mb-4 text-sm text-red-600">{errors.payments}</p>}
-
+            <PaymentSection
+              formData={formData}
+              setFormData={setFormData}
+              newPayment={newPayment}
+              setNewPayment={setNewPayment}
+              editingPaymentIndex={editingPaymentIndex}
+              setEditingPaymentIndex={setEditingPaymentIndex}
+              errors={errors}
+              setErrors={setErrors}
+              calculateTotalAmount={calculateTotalAmount}
+              calculateTotalPaidAmount={calculateTotalPaidAmount}
+            />
             {/* Submit Button */}
-            <div className="flex justify-end mt-8">
+            <div className="flex justify-end">
               <button
                 type="submit"
                 className="inline-flex items-center justify-center px-8 py-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white font-semibold rounded-xl hover:from-purple-500 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-                ref={submitButtonRef}
               >
-                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <svg
+                  className="w-5 h-5 mr-2"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
                 </svg>
                 Save Purchase
               </button>
