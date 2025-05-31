@@ -1,22 +1,50 @@
 // lib/payments.js
 
+import {
+  DollarSign,
+  Banknote,
+  FileText,
+  Smartphone,
+  CreditCard,
+} from "lucide-react";
+
 export const paymentMethods = [
-  { value: "CASH", label: "Cash", icon: "💵", requiresReference: false },
+  {
+    value: "CASH",
+    label: "Cash",
+    icon: DollarSign,
+    requiresReference: false,
+  },
   {
     value: "BANK_TRANSFER",
     label: "Bank Transfer",
-    icon: "🏦",
-    requiresReference: false,
+    icon: Banknote,
+    requiresReference: true,
   },
-  { value: "CHEQUE", label: "Cheque", icon: "📄", requiresReference: false },
-  { value: "UPI", label: "UPI", icon: "📱", requiresReference: false },
-  { value: "CARD", label: "Card", icon: "💳", requiresReference: false },
+  {
+    value: "CHEQUE",
+    label: "Cheque",
+    icon: FileText,
+    requiresReference: true,
+  },
+  {
+    value: "UPI",
+    label: "UPI",
+    icon: Smartphone,
+    requiresReference: true,
+  },
+  {
+    value: "CARD",
+    label: "Card",
+    icon: CreditCard,
+    requiresReference: true,
+  },
 ];
 
 export function getReferencePlaceholder(method) {
   switch (method) {
     case "CHEQUE":
-      return "Cheque number"; 
+      return "Cheque number";
     case "UPI":
       return "Transaction ID";
     case "BANK_TRANSFER":
@@ -29,8 +57,6 @@ export function getReferencePlaceholder(method) {
 }
 
 export function isReferenceRequired(currentPaymentMethod) {
-  const method = paymentMethods.find(
-    (m) => m.value === currentPaymentMethod
-  );
+  const method = paymentMethods.find((m) => m.value === currentPaymentMethod);
   return method?.requiresReference || false;
 }
