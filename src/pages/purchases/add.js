@@ -1,18 +1,10 @@
 // pages/purchases/add.js
-
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
-
-// Define PaymentMethodType enum for client-side use
-const PaymentMethodType = {
-  CASH: 'CASH',
-  BANK_TRANSFER: 'BANK_TRANSFER',
-  CHEQUE: 'CHEQUE',
-  UPI: 'UPI',
-  CARD: 'CARD',
-};
-
+import ItemListTable from '../../components/purchases/ItemListTable';
+import PaymentMethodSelection from '../../components/transactions/PaymentMethodSelection';
+import { paymentMethods, getReferencePlaceholder, isReferenceRequired } from '../../lib/payments';
 export default function AddPurchase() {
   const router = useRouter();
   const [suppliers, setSuppliers] = useState([]);
@@ -21,7 +13,7 @@ export default function AddPurchase() {
     supplierId: '',
     date: new Date().toISOString().split('T')[0],
     items: [],
-    payments: [], // Changed to an array to hold multiple payments
+    payments: [],
   });
   const [errors, setErrors] = useState({});
 
@@ -32,31 +24,18 @@ export default function AddPurchase() {
     numberOfBunches: '',
   });
 
-  const [newPayment, setNewPayment] = useState({ // State for new payment entry
+  const [newPayment, setNewPayment] = useState({
     amount: '',
-    method: PaymentMethodType.CASH, // Default to CASH
+    method: paymentMethods[0]?.value || 'CASH', // Default to the first payment method or 'CASH'
     reference: '',
   });
 
   const [editingIndex, setEditingIndex] = useState(null);
-  const [editingPaymentIndex, setEditingPaymentIndex] = useState(null); // New state for editing payments
+  const [editingPaymentIndex, setEditingPaymentIndex] = useState(null);
 
-  // Refs for input fields to handle "Enter" key navigation
-  const supplierRef = useRef(null);
-  const dateRef = useRef(null);
+  // Refs for input fields
   const itemSelectRef = useRef(null);
-  const quantityRef = useRef(null);
-  const rateRef = useRef(null);
-  const numberOfBunchesRef = useRef(null);
-  const addItemButtonRef = useRef(null);
-
-  // New refs for payment section
   const paymentAmountRef = useRef(null);
-  const paymentMethodRef = useRef(null);
-  const paymentReferenceRef = useRef(null);
-  const addPaymentButtonRef = useRef(null);
-
-  const submitButtonRef = useRef(null);
 
 
   // Fetch suppliers and items from your API
@@ -93,12 +72,9 @@ export default function AddPurchase() {
     const { name, value } = e.target;
     setNewItem(prev => ({ ...prev, [name]: value }));
 
-    // If item is selected, pre-fill the rate (assuming it's a purchase rate now, not salesRate)
-    // IMPORTANT: Make sure your Item model has a 'purchaseRate' or similar field
     if (name === 'itemId') {
       const selectedItem = items.find(i => i.id === parseInt(value));
       if (selectedItem) {
-        // Assuming 'purchaseRate' or similar exists on the Item model
         setNewItem(prev => ({ ...prev, rate: selectedItem.purchaseRate?.toString() || '' }));
       } else {
         setNewItem(prev => ({ ...prev, rate: '' }));
@@ -108,7 +84,18 @@ export default function AddPurchase() {
 
   const handleNewPaymentChange = (e) => {
     const { name, value } = e.target;
-    setNewPayment(prev => ({ ...prev, [name]: value }));
+    setNewPayment(prev => {
+      const updatedPayment = { ...prev, [name]: value };
+
+      // If method changes, reset reference if the new method doesn't require it
+      if (name === 'method') {
+        const requiresRef = isReferenceRequired(value);
+        if (!requiresRef) {
+          updatedPayment.reference = '';
+        }
+      }
+      return updatedPayment;
+    });
     setErrors(prev => ({ ...prev, currentPayment: { ...prev.currentPayment, [name]: undefined } }));
   };
 
@@ -154,24 +141,22 @@ export default function AddPurchase() {
       };
 
       if (editingIndex !== null) {
-        // Update existing item
         const updatedItems = [...formData.items];
         updatedItems[editingIndex] = newItemData;
         setFormData(prev => ({
           ...prev,
           items: updatedItems
         }));
-        setEditingIndex(null); // Clear editing state
+        setEditingIndex(null);
       } else {
-        // Add new item
         setFormData(prev => ({
           ...prev,
           items: [...prev.items, newItemData]
         }));
       }
 
-      setNewItem({ itemId: '', quantity: '', rate: '', numberOfBunches: '' }); // Reset for next item
-      itemSelectRef.current?.focus(); // Focus on item selection after adding/updating
+      setNewItem({ itemId: '', quantity: '', rate: '', numberOfBunches: '' });
+      itemSelectRef.current?.focus();
     }
   };
 
@@ -184,7 +169,7 @@ export default function AddPurchase() {
       numberOfBunches: itemToEdit.numberOfBunches.toString(),
     });
     setEditingIndex(index);
-    itemSelectRef.current?.focus(); // Focus on item selection for editing
+    itemSelectRef.current?.focus();
   };
 
   const cancelEdit = () => {
@@ -193,17 +178,14 @@ export default function AddPurchase() {
     itemSelectRef.current?.focus();
   };
 
-
   const removeItem = (index) => {
     setFormData(prev => ({
       ...prev,
       items: prev.items.filter((_, i) => i !== index)
     }));
-    // If the removed item was the one being edited, clear editing state
     if (editingIndex === index) {
       cancelEdit();
     } else if (editingIndex > index) {
-      // If an item before the edited item was removed, adjust editingIndex
       setEditingIndex(prev => prev - 1);
     }
   };
@@ -216,9 +198,15 @@ export default function AddPurchase() {
 
     if (!newPayment.amount || isNaN(paymentAmount) || paymentAmount <= 0) {
       currentPaymentErrors.amount = 'Positive amount required.';
-    } else if (totalPaidAmount + paymentAmount > totalPurchaseAmount) {
+    } else if (totalPaidAmount + paymentAmount > totalPurchaseAmount && editingPaymentIndex === null) {
+      // Only check against total if it's a new payment or the amount exceeds the total after editing
       currentPaymentErrors.amount = `Payment cannot exceed remaining amount (${(totalPurchaseAmount - totalPaidAmount).toFixed(2)}).`;
     }
+
+    if (isReferenceRequired(newPayment.method) && !newPayment.reference.trim()) {
+      currentPaymentErrors.reference = 'Reference is required for this payment method.';
+    }
+
 
     if (Object.keys(currentPaymentErrors).length > 0) {
       setErrors(prev => ({ ...prev, currentPayment: currentPaymentErrors }));
@@ -247,7 +235,7 @@ export default function AddPurchase() {
         payments: [...prev.payments, newPaymentData]
       }));
     }
-    setNewPayment({ amount: '', method: PaymentMethodType.CASH, reference: '' }); // Reset for next payment
+    setNewPayment({ amount: '', method: paymentMethods[0]?.value || 'CASH', reference: '' }); // Reset for next payment
     paymentAmountRef.current?.focus();
   };
 
@@ -263,7 +251,7 @@ export default function AddPurchase() {
   };
 
   const cancelPaymentEdit = () => {
-    setNewPayment({ amount: '', method: PaymentMethodType.CASH, reference: '' });
+    setNewPayment({ amount: '', method: paymentMethods[0]?.value || 'CASH', reference: '' });
     setEditingPaymentIndex(null);
     paymentAmountRef.current?.focus();
   };
@@ -286,14 +274,6 @@ export default function AddPurchase() {
 
   const calculateTotalPaidAmount = () => {
     return formData.payments.reduce((sum, payment) => sum + payment.amount, 0);
-  };
-
-  // Handle "Enter" key press for navigation
-  const handleKeyDown = (e, nextFieldRef) => {
-    if (e.key === 'Enter') {
-      e.preventDefault(); // Prevent form submission if it's the last input
-      nextFieldRef.current?.focus();
-    }
   };
 
   const handleSubmit = async (e) => {
@@ -325,7 +305,7 @@ export default function AddPurchase() {
         rate: item.rate,
         weightDeduction: item.weightDeduction
       })),
-      payments: formData.payments, // Send the array of payments
+      payments: formData.payments,
     };
 
     try {
@@ -384,10 +364,8 @@ export default function AddPurchase() {
                   name="supplierId"
                   value={formData.supplierId}
                   onChange={handleInputChange}
-                  onKeyDown={(e) => handleKeyDown(e, dateRef)}
                   className={`w-full py-3 px-4 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white ${errors.supplierId ? 'border-red-500' : 'border-slate-300'}`}
                   required
-                  ref={supplierRef}
                 >
                   <option value="">Select Supplier</option>
                   {suppliers.map(s => (
@@ -405,10 +383,8 @@ export default function AddPurchase() {
                   name="date"
                   value={formData.date}
                   onChange={handleInputChange}
-                  onKeyDown={(e) => handleKeyDown(e, itemSelectRef)}
                   className="w-full py-3 px-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white"
                   required
-                  ref={dateRef}
                 />
               </div>
             </div>
@@ -423,10 +399,9 @@ export default function AddPurchase() {
                   name="itemId"
                   value={newItem.itemId}
                   onChange={handleItemChange}
-                  onKeyDown={(e) => handleKeyDown(e, quantityRef)}
+                  ref={itemSelectRef} // Assign ref here
                   className={`w-full py-3 px-4 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white ${errors.currentItem?.itemId ? 'border-red-500' : 'border-slate-300'}`}
                   required
-                  ref={itemSelectRef}
                 >
                   <option value="">Select Item</option>
                   {items.map(item => (
@@ -444,12 +419,10 @@ export default function AddPurchase() {
                   placeholder="e.g., 10"
                   value={newItem.quantity}
                   onChange={handleItemChange}
-                  onKeyDown={(e) => handleKeyDown(e, rateRef)}
                   min="0.01"
                   step="0.01"
                   className={`w-full py-3 px-4 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white ${errors.currentItem?.quantity ? 'border-red-500' : 'border-slate-300'}`}
                   required
-                  ref={quantityRef}
                 />
                 {errors.currentItem?.quantity && <p className="mt-1 text-sm text-red-600">{errors.currentItem.quantity}</p>}
               </div>
@@ -462,12 +435,10 @@ export default function AddPurchase() {
                   placeholder="e.g., 25.50"
                   value={newItem.rate}
                   onChange={handleItemChange}
-                  onKeyDown={(e) => handleKeyDown(e, numberOfBunchesRef)}
                   min="0"
                   step="0.01"
                   className={`w-full py-3 px-4 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white ${errors.currentItem?.rate ? 'border-red-500' : 'border-slate-300'}`}
                   required
-                  ref={rateRef}
                 />
                 {errors.currentItem?.rate && <p className="mt-1 text-sm text-red-600">{errors.currentItem.rate}</p>}
               </div>
@@ -480,16 +451,9 @@ export default function AddPurchase() {
                   placeholder="e.g., 2"
                   value={newItem.numberOfBunches}
                   onChange={handleItemChange}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      addItemToList(); // Add/Update item on Enter
-                    }
-                  }}
                   min="0"
                   step="1"
                   className={`w-full py-3 px-4 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white ${errors.currentItem?.numberOfBunches ? 'border-red-500' : 'border-slate-300'}`}
-                  ref={numberOfBunchesRef}
                 />
                 {errors.currentItem?.numberOfBunches && <p className="mt-1 text-sm text-red-600">{errors.currentItem.numberOfBunches}</p>}
               </div>
@@ -498,7 +462,6 @@ export default function AddPurchase() {
                   type="button"
                   onClick={addItemToList}
                   className="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 bg-blue-500 text-white font-semibold rounded-xl hover:bg-blue-600 transition-all duration-200 shadow-md"
-                  ref={addItemButtonRef}
                 >
                   <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={editingIndex !== null ? "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" : "M12 4v16m8-8H4"} />
@@ -519,65 +482,12 @@ export default function AddPurchase() {
             {errors.items && <p className="mb-4 text-sm text-red-600">{errors.items}</p>}
 
             {/* Item List Table */}
-            {formData.items.length > 0 && (
-              <div className="mb-6 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                <table className="min-w-full divide-y divide-slate-200">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Item</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Quantity</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">No. of Bunches</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Net Weight</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Rate</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Amount</th>
-                      <th className="px-6 py-3 text-center text-xs font-semibold text-slate-700 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-slate-200">
-                    {formData.items.map((item, index) => (
-                      <tr key={index} className="hover:bg-slate-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{item.name}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">{item.quantity} {item.unit}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">{item.numberOfBunches}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700 font-semibold">{item.effectiveQuantity.toFixed(2)} {item.unit}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">₹{item.rate.toFixed(2)}/{item.unit}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 font-semibold">₹{item.amount.toFixed(2)}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center">
-                          <div className="flex items-center justify-center space-x-2">
-                            <button
-                              type="button"
-                              onClick={() => editItem(index)}
-                              className="text-blue-600 hover:text-blue-900"
-                              title="Edit Item"
-                            >
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L15.232 5.232z" />
-                              </svg>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => removeItem(index)}
-                              className="text-red-600 hover:text-red-900"
-                              title="Remove Item"
-                            >
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="bg-slate-50 px-6 py-4 flex justify-between items-center text-lg font-bold text-slate-900">
-                  <span>Grand Total:</span>
-                  <span>₹{calculateTotalAmount().toFixed(2)}</span>
-                </div>
-              </div>
-            )}
-
-            ---
+            <ItemListTable
+              items={formData.items}
+              editItem={editItem}
+              removeItem={removeItem}
+              calculateTotalAmount={calculateTotalAmount}
+            />
 
             {/* Payment Section */}
             <h3 className="text-xl font-semibold text-slate-900 mb-4">{editingPaymentIndex !== null ? 'Edit Payment' : 'Add Payment'}</h3>
@@ -591,57 +501,46 @@ export default function AddPurchase() {
                   placeholder="e.g., 500.00"
                   value={newPayment.amount}
                   onChange={handleNewPaymentChange}
-                  onKeyDown={(e) => handleKeyDown(e, paymentMethodRef)}
+                  ref={paymentAmountRef} // Assign ref here
                   min="0.01"
                   step="0.01"
                   className={`w-full py-3 px-4 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white ${errors.currentPayment?.amount ? 'border-red-500' : 'border-slate-300'}`}
-                  ref={paymentAmountRef}
                 />
                 {errors.currentPayment?.amount && <p className="mt-1 text-sm text-red-600">{errors.currentPayment.amount}</p>}
               </div>
 
-              <div>
-                <label htmlFor="paymentMethod" className="block text-sm font-medium text-slate-700 mb-2">Method <span className="text-red-500">*</span></label>
-                <select
-                  id="paymentMethod"
-                  name="method"
-                  value={newPayment.method}
-                  onChange={handleNewPaymentChange}
-                  onKeyDown={(e) => handleKeyDown(e, paymentReferenceRef)}
-                  className="w-full py-3 px-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white"
-                  ref={paymentMethodRef}
-                >
-                  {Object.values(PaymentMethodType).map(method => (
-                    <option key={method} value={method}>{method.replace('_', ' ')}</option>
-                  ))}
-                </select>
+              {/* Payment Method Selection Component */}
+              <div className="md:col-span-2">
+                <PaymentMethodSelection
+                  paymentMethods={paymentMethods}
+                  formData={newPayment} // Pass newPayment as formData
+                  handleChange={handleNewPaymentChange}
+                />
               </div>
 
               <div>
-                <label htmlFor="paymentReference" className="block text-sm font-medium text-slate-700 mb-2">Reference (Optional)</label>
+                <label htmlFor="paymentReference" className="block text-sm font-medium text-slate-700 mb-2">
+                  Reference {isReferenceRequired(newPayment.method) && <span className="text-red-500">*</span>}
+                  {!isReferenceRequired(newPayment.method) && <span className="text-slate-500">(Optional)</span>}
+                </label>
                 <input
                   type="text"
                   id="paymentReference"
                   name="reference"
-                  placeholder="e.g., Cheque No. 123, UPI ID"
+                  placeholder={getReferencePlaceholder(newPayment.method)}
                   value={newPayment.reference}
                   onChange={handleNewPaymentChange}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      addPaymentToList();
-                    }
-                  }}
-                  className="w-full py-3 px-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white"
-                  ref={paymentReferenceRef}
+                  className={`w-full py-3 px-4 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors duration-200 bg-slate-50 focus:bg-white ${errors.currentPayment?.reference ? 'border-red-500' : 'border-slate-300'}`}
+                  required={isReferenceRequired(newPayment.method)}
                 />
+                {errors.currentPayment?.reference && <p className="mt-1 text-sm text-red-600">{errors.currentPayment.reference}</p>}
               </div>
+
               <div className="md:col-span-3 flex gap-4">
                 <button
                   type="button"
                   onClick={addPaymentToList}
                   className="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 bg-green-500 text-white font-semibold rounded-xl hover:bg-green-600 transition-all duration-200 shadow-md"
-                  ref={addPaymentButtonRef}
                 >
                   <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={editingPaymentIndex !== null ? "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" : "M12 4v16m8-8H4"} />
@@ -725,7 +624,6 @@ export default function AddPurchase() {
               <button
                 type="submit"
                 className="inline-flex items-center justify-center px-8 py-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white font-semibold rounded-xl hover:from-purple-500 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-                ref={submitButtonRef}
               >
                 <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />

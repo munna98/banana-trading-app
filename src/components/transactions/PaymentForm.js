@@ -9,7 +9,7 @@ import NotesInput from "./NotesInput";
 import FormActions from "./FormActions";
 
 export default function PaymentForm({
-  formData,
+  formData, 
   setFormData,
   debitAccounts,
   purchases,
