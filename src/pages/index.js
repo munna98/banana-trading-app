@@ -4,16 +4,6 @@ import { prisma } from '../lib/db';
 import Link from 'next/link';
 
 export default function Dashboard({ summary, recentTransactions, cashBook }) {
-  const [currentTime, setCurrentTime] = useState(new Date());
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, []);
-
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
@@ -21,14 +11,6 @@ export default function Dashboard({ summary, recentTransactions, cashBook }) {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     }).format(amount);
-  };
-
-  const formatTime = (date) => {
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    });
   };
 
   const getBalanceColor = (balance) => {
@@ -112,12 +94,6 @@ export default function Dashboard({ summary, recentTransactions, cashBook }) {
               day: 'numeric'
             })}
           </p>
-        </div>
-        <div className="text-right">
-          <div className="text-2xl font-mono font-bold text-gray-800">
-            {formatTime(currentTime)}
-          </div>
-          <div className="text-sm text-gray-500">Current Time</div>
         </div>
       </div>
 
@@ -362,6 +338,29 @@ export default function Dashboard({ summary, recentTransactions, cashBook }) {
   );
 }
 
+// Helper function to serialize Date objects recursively
+function serializeData(obj) {
+  if (obj === null || obj === undefined) return obj;
+  
+  if (obj instanceof Date) {
+    return obj.toISOString();
+  }
+  
+  if (Array.isArray(obj)) {
+    return obj.map(serializeData);
+  }
+  
+  if (typeof obj === 'object') {
+    const serialized = {};
+    for (const [key, value] of Object.entries(obj)) {
+      serialized[key] = serializeData(value);
+    }
+    return serialized;
+  }
+  
+  return obj;
+}
+
 export async function getServerSideProps() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -459,7 +458,7 @@ export async function getServerSideProps() {
       return total + (saleTotal - receiptTotal);
     }, 0);
 
-    // Format recent transactions
+    // Format recent transactions - CONVERT DATES TO STRINGS
     const formattedTransactions = recentTransactions.map(transaction => {
       let party = null;
       let balance = 0;
@@ -480,7 +479,7 @@ export async function getServerSideProps() {
       }
 
       return {
-        date: transaction.date,
+        date: transaction.date.toISOString(), // Convert Date to string
         type: transaction.type,
         party,
         amount: transaction.amount,
@@ -503,8 +502,18 @@ export async function getServerSideProps() {
       closingCash: 0
     };
 
+    // Serialize cashBook data to handle any Date fields
+    const serializedCashBook = cashBookToday ? {
+      openingCash: cashBookToday.openingCash || 0,
+      cashIn: cashBookToday.cashIn || 0,
+      cashOut: cashBookToday.cashOut || 0,
+      closingCash: cashBookToday.closingCash || 0,
+      // Convert date to string if it exists
+      ...(cashBookToday.date && { date: cashBookToday.date.toISOString() })
+    } : defaultCashBook;
+
     return {
-      props: {
+      props: serializeData({
         summary: {
           itemCount,
           supplierCount,
@@ -523,15 +532,15 @@ export async function getServerSideProps() {
           }
         },
         recentTransactions: formattedTransactions,
-        cashBook: cashBookToday || defaultCashBook
-      }
+        cashBook: serializedCashBook
+      })
     };
   } catch (error) {
     console.error('Error fetching dashboard data:', error);
     
     // Return default data in case of error
     return {
-      props: {
+      props: serializeData({
         summary: {
           itemCount: 0,
           supplierCount: 0,
@@ -546,7 +555,7 @@ export async function getServerSideProps() {
         },
         recentTransactions: [],
         cashBook: { openingCash: 0, cashIn: 0, cashOut: 0, closingCash: 0 }
-      }
+      })
     };
   }
 }
