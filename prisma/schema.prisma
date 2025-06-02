@@ -52,13 +52,20 @@ model Customer {
   accountId Int       @unique
 }
 
+model InvoiceCounter {
+  id          Int      @id @default(autoincrement())
+  prefix      String   @unique // e.g., "PUR", "SALE"
+  lastNumber  Int      @default(0)
+  lastDate    DateTime @default(now()) // To reset sequence daily/monthly
+}
+
 model Purchase {
   id           Int          @id @default(autoincrement())
   supplierId   Int
   supplier     Supplier     @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   totalAmount  Float        // Total amount of the purchase
   paidAmount   Float        @default(0) // Sum of associated Payments
-  // balance Float @default(0) // Removed: Calculated (totalAmount - paidAmount)
+  balance      Float        @default(0)
   date         DateTime     @default(now())
   invoiceNo    String?      @unique
   items        PurchaseItem[]

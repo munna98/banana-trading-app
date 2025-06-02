@@ -1,9 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
 
-/**
- * Custom hook for form state management and validation
- * Designed for Banana Trading Business Management System
- */
 const useForm = (initialValues = {}, validationRules = {}, options = {}) => {
   const [values, setValues] = useState(initialValues);
   const [errors, setErrors] = useState({});

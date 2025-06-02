@@ -1,4 +1,4 @@
-// hooks/usePurchaseForm.js - Extract form logic
+// hooks/usePurchaseForm.js - Remove item input validation on form submit
 import { useState } from "react";
 import { paymentMethods } from "../../lib/payments";
 
@@ -121,16 +121,30 @@ export function usePurchaseForm() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    // UPDATED: Only validate form-level requirements, not current item input fields
     const newErrors = {};
-    if (!formData.supplierId) newErrors.supplierId = "Supplier is required.";
-    if (formData.items.length === 0) newErrors.items = "At least one item is required.";
+    
+    // Check if supplier is selected
+    if (!formData.supplierId) {
+      newErrors.supplierId = "Supplier is required.";
+    }
+    
+    // Check if at least one item exists in the items table
+    if (formData.items.length === 0) {
+      newErrors.items = "At least one item is required.";
+    }
 
+    // Validate payment amounts
     const totalPurchaseAmount = calculateTotalAmount();
     const totalPaidAmount = calculateTotalPaidAmount();
 
     if (totalPaidAmount > totalPurchaseAmount) {
       newErrors.payments = `Total paid amount (${totalPaidAmount.toFixed(2)}) cannot exceed total purchase amount (${totalPurchaseAmount.toFixed(2)}).`;
     }
+
+    // REMOVED: No validation of current item input fields (newItem)
+    // The form can be submitted even if there are values in the input fields
+    // as long as there's at least one item in the items table
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -142,7 +156,10 @@ export function usePurchaseForm() {
       supplierId: parseInt(formData.supplierId),
       date: formData.date,
       items: formData.items.map(item => ({
-        itemId: item.itemId, quantity: item.quantity, rate: item.rate, weightDeduction: item.weightDeduction,
+        itemId: item.itemId, 
+        quantity: item.quantity, 
+        rate: item.rate, 
+        weightDeduction: item.weightDeduction,
       })),
       payments: formData.payments,
     };

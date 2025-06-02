@@ -1,7 +1,11 @@
 // pages/api/purchases/index.js
 import { PrismaClient } from '@prisma/client';
+import { generateInvoiceNumber } from '../../../lib/invoiceGenerator'; // Adjust path as needed
 
 const prisma = new PrismaClient();
+
+// Determine if we are in development mode
+const isDevelopment = process.env.NODE_ENV === 'development';
 
 export default async function handler(req, res) {
   const { method } = req;
@@ -20,15 +24,16 @@ export default async function handler(req, res) {
         });
     }
   } catch (error) {
-    console.error('API Error:', error);
+    // Global API error handler for unexpected errors
+    console.error('API Error in handler:', error); // Log the full error object
+
     return res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: isDevelopment ? error.message : 'Internal server error',
     });
   }
 }
 
-// GET /api/purchases - Get all purchases with search and sort
 async function handleGet(req, res) {
   try {
     const { search, sortBy = 'date', sortOrder = 'desc', supplierId } = req.query;
@@ -36,46 +41,34 @@ async function handleGet(req, res) {
     let whereClause = {};
     let orderByClause = {};
 
-    // Search functionality
     if (search) {
       whereClause.OR = [
         {
           supplier: {
             name: {
               contains: search,
-              mode: 'insensitive' // Case-insensitive search for SQLite
+              mode: 'insensitive'
             }
           }
         },
-        // You might want to add search by item names within the purchase
-        // This would require a more complex query with `some` or `every`
-        // For simplicity, we'll keep it at supplier name for now.
-        // {
-        //   items: {
-        //     some: {
-        //       item: {
-        //         name: {
-        //           contains: search,
-        //           mode: 'insensitive'
-        //         }
-        //       }
-        //     }
-        //   }
-        // }
+        {
+          invoiceNo: {
+            contains: search,
+            mode: 'insensitive'
+          }
+        }
       ];
     }
 
-    // Filter by supplierId
     if (supplierId) {
       whereClause.supplierId = parseInt(supplierId);
     }
 
-    // Sort functionality
     const validSortFields = ['date', 'totalAmount', 'paidAmount', 'balance'];
     if (validSortFields.includes(sortBy)) {
       orderByClause[sortBy] = sortOrder === 'desc' ? 'desc' : 'asc';
     } else {
-      orderByClause.date = 'desc'; // Default sort for purchases
+      orderByClause.date = 'desc';
     }
 
     const purchases = await prisma.purchase.findMany({
@@ -112,18 +105,17 @@ async function handleGet(req, res) {
     console.error('Error fetching purchases:', error);
     return res.status(500).json({
       success: false,
-      message: 'Failed to fetch purchases'
+      message: isDevelopment ? error.message : 'Failed to fetch purchases',
     });
   }
 }
 
-// POST /api/purchases - Create a new purchase
 async function handlePost(req, res) {
   try {
-    const { supplierId, items, paidAmount = 0 } = req.body;
+    const { supplierId, date, items, payments = [] } = req.body;
 
     // Validate incoming data
-    const validation = validatePurchaseData({ supplierId, items, paidAmount });
+    const validation = validatePurchaseData({ supplierId, items, payments });
     if (!validation.isValid) {
       return res.status(400).json({
         success: false,
@@ -135,18 +127,24 @@ async function handlePost(req, res) {
     // Calculate total amount from items
     let totalAmount = 0;
     for (const item of items) {
-      const { itemId, quantity, rate, weightDeduction } = item;
+      const { quantity, rate, weightDeduction } = item;
       if (typeof quantity !== 'number' || typeof rate !== 'number' || quantity <= 0 || rate < 0) {
         return res.status(400).json({
           success: false,
           message: 'Invalid quantity or rate for purchase items.'
         });
       }
-      const actualQuantity = quantity - (weightDeduction || 0); // Apply weight deduction if provided
+      const actualQuantity = quantity - (weightDeduction || 0);
       totalAmount += actualQuantity * rate;
     }
 
-    const balance = totalAmount - parseFloat(paidAmount);
+    // Calculate total paid amount from payments
+    let totalPaidAmount = payments.reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
+
+    const balance = totalAmount - totalPaidAmount; // This balance will now only be stored on the Purchase record
+
+    // Generate the invoice number
+    const invoiceNo = await generateInvoiceNumber("PUR");
 
     // Use a transaction to ensure atomicity
     const newPurchase = await prisma.$transaction(async (prisma) => {
@@ -155,16 +153,25 @@ async function handlePost(req, res) {
         data: {
           supplierId: parseInt(supplierId),
           totalAmount: totalAmount,
-          paidAmount: parseFloat(paidAmount),
-          balance: balance,
-          date: new Date(), // Set current date
+          paidAmount: totalPaidAmount,
+          balance: balance, // Storing balance on the Purchase record itself
+          date: date ? new Date(date) : new Date(),
+          invoiceNo: invoiceNo,
           items: {
             create: items.map(item => ({
               itemId: parseInt(item.itemId),
               quantity: parseFloat(item.quantity),
-              weightDeduction: parseFloat(item.weightDeduction || 1.5), // Default to 1.5
+              weightDeduction: parseFloat(item.weightDeduction || 0),
               rate: parseFloat(item.rate),
-              amount: (parseFloat(item.quantity) - parseFloat(item.weightDeduction || 1.5)) * parseFloat(item.rate)
+              amount: (parseFloat(item.quantity) - parseFloat(item.weightDeduction || 0)) * parseFloat(item.rate)
+            }))
+          },
+          payments: {
+            create: payments.map(payment => ({
+              amount: parseFloat(payment.amount),
+              method: payment.method,
+              reference: payment.reference || null,
+              date: new Date(),
             }))
           }
         },
@@ -174,19 +181,20 @@ async function handlePost(req, res) {
             include: {
               item: true
             }
-          }
+          },
+          payments: true
         }
       });
 
-      // Update supplier balance
-      await prisma.supplier.update({
-        where: { id: parseInt(supplierId) },
-        data: {
-          balance: {
-            increment: balance // Add the purchase balance to supplier's balance
-          }
-        }
-      });
+      // Removed: Supplier balance update logic
+      // await prisma.supplier.update({
+      //   where: { id: parseInt(supplierId) },
+      //   data: {
+      //     balance: {
+      //       increment: balance
+      //     }
+      //   }
+      // });
 
       return purchase;
     });
@@ -198,22 +206,32 @@ async function handlePost(req, res) {
     });
 
   } catch (error) {
-    console.error('Error creating purchase:', error);
-    if (error.code === 'P2003') { // Foreign key constraint failed (e.g., invalid supplierId or itemId)
+    if (error.code === 'P2003') {
+      console.error('Prisma Foreign Key Constraint Error:', error.message, error.meta);
       return res.status(400).json({
         success: false,
-        message: 'Invalid supplier ID or item ID provided.'
+        message: 'Invalid supplier ID or item ID provided. Please ensure they exist.',
+        error: isDevelopment ? error.message : undefined,
       });
     }
+    if (error.code === 'P2002' && error.meta?.target?.includes('invoiceNo')) {
+      console.error('Prisma Unique Constraint Error (invoiceNo):', error.message, error.meta);
+      return res.status(409).json({
+        success: false,
+        message: 'A purchase with this invoice number already exists. Please try again.',
+        error: isDevelopment ? error.message : undefined,
+      });
+    }
+    console.error('Error creating purchase in handlePost:', error);
+
     return res.status(500).json({
       success: false,
-      message: 'Failed to create purchase'
+      message: isDevelopment ? error.message : 'Failed to create purchase',
     });
   }
 }
 
-// Validation helper function for Purchase data
-function validatePurchaseData({ supplierId, items, paidAmount }) {
+function validatePurchaseData({ supplierId, items, payments }) {
   const errors = {};
 
   if (!supplierId) {
@@ -226,25 +244,32 @@ function validatePurchaseData({ supplierId, items, paidAmount }) {
     errors.items = 'At least one item is required for a purchase.';
   } else {
     items.forEach((item, index) => {
-      if (!item.itemId) {
-        errors[`items[${index}].itemId`] = 'Item ID is required.';
-      } else if (isNaN(parseInt(item.itemId))) {
-        errors[`items[${index}].itemId`] = 'Item ID must be a valid number.';
+      if (item.itemId === undefined || item.itemId === null || isNaN(parseInt(item.itemId))) {
+        errors[`items[${index}].itemId`] = 'Item ID is required and must be a valid number.';
       }
-      if (item.quantity === undefined || isNaN(parseFloat(item.quantity)) || parseFloat(item.quantity) <= 0) {
+      if (item.quantity === undefined || item.quantity === null || isNaN(parseFloat(item.quantity)) || parseFloat(item.quantity) <= 0) {
         errors[`items[${index}].quantity`] = 'Quantity must be a positive number.';
       }
-      if (item.rate === undefined || isNaN(parseFloat(item.rate)) || parseFloat(item.rate) < 0) {
+      if (item.rate === undefined || item.rate === null || isNaN(parseFloat(item.rate)) || parseFloat(item.rate) < 0) {
         errors[`items[${index}].rate`] = 'Rate must be a non-negative number.';
       }
-      if (item.weightDeduction !== undefined && (isNaN(parseFloat(item.weightDeduction)) || parseFloat(item.weightDeduction) < 0)) {
+      if (item.weightDeduction !== undefined && item.weightDeduction !== null && (isNaN(parseFloat(item.weightDeduction)) || parseFloat(item.weightDeduction) < 0)) {
         errors[`items[${index}].weightDeduction`] = 'Weight deduction must be a non-negative number.';
       }
     });
   }
 
-  if (paidAmount !== undefined && (isNaN(parseFloat(paidAmount)) || parseFloat(paidAmount) < 0)) {
-    errors.paidAmount = 'Paid amount must be a non-negative number.';
+  if (!Array.isArray(payments)) {
+    errors.payments = 'Payments must be an array.';
+  } else {
+    payments.forEach((payment, index) => {
+      if (payment.amount === undefined || payment.amount === null || isNaN(parseFloat(payment.amount)) || parseFloat(payment.amount) < 0) {
+        errors[`payments[${index}].amount`] = 'Payment amount must be a non-negative number.';
+      }
+      if (!payment.method) {
+        errors[`payments[${index}].method`] = 'Payment method is required.';
+      }
+    });
   }
 
   return {
@@ -253,7 +278,6 @@ function validatePurchaseData({ supplierId, items, paidAmount }) {
   };
 }
 
-// Helper function to get purchase statistics
 export async function getPurchaseStats() {
   try {
     const totalPurchasesResult = await prisma.purchase.aggregate({

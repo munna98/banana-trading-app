@@ -63,7 +63,6 @@ export default function ItemInputForm({
                 ? "border-red-500"
                 : "border-slate-300"
             }`}
-            required
           >
             <option value="">Select Item</option>
             {items.map((item) => (
@@ -101,7 +100,6 @@ export default function ItemInputForm({
                 ? "border-red-500"
                 : "border-slate-300"
             }`}
-            required
           />
           {errors.currentItem?.quantity && (
             <p className="mt-1 text-sm text-red-600">
@@ -132,7 +130,6 @@ export default function ItemInputForm({
                 ? "border-red-500"
                 : "border-slate-300"
             }`}
-            required
           />
           {errors.currentItem?.rate && (
             <p className="mt-1 text-sm text-red-600">

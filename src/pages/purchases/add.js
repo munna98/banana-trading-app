@@ -1,4 +1,4 @@
-// pages/purchases/add.js - FIXED VERSION
+// pages/purchases/add.js - UPDATED VERSION
 import { useRouter } from "next/router";
 import ItemInputForm from "../../components/purchases/ItemInputForm";
 import ItemListTable from "../../components/purchases/ItemListTable";
@@ -81,8 +81,13 @@ export default function AddPurchase() {
                 onCancelEdit={cancelEdit}
               />
 
+              {/* Display form-level errors */}
               {errors.items && (
                 <p className="mb-4 text-sm text-red-600">{errors.items}</p>
+              )}
+              
+              {errors.general && (
+                <p className="mb-4 text-sm text-red-600">{errors.general}</p>
               )}
 
               <ItemListTable
