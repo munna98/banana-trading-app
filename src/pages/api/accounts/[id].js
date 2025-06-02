@@ -53,8 +53,7 @@ async function handleGet(req, res, accountId) {
     includeEntries,
     includeFullHierarchy,
     entriesLimit = 50,
-  } = req.query; // Removed includeBalance here
-
+  } = req.query; 
   try {
     // Build include clause based on query parameters
     const include = {};

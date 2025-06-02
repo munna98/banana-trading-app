@@ -2,7 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react";
 
-export const usePaymentFormLogic = (initialSupplierId, initialPurchaseId, setGlobalError) => {
+export const usePaymentFormLogic = (
+  initialSupplierId,
+  initialPurchaseId,
+  setGlobalError
+) => {
   const [debitAccounts, setDebitAccounts] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [formData, setFormData] = useState({
@@ -14,7 +18,8 @@ export const usePaymentFormLogic = (initialSupplierId, initialPurchaseId, setGlo
     date: new Date().toISOString().split("T")[0],
     debitAccountId: "",
   });
-  const [selectedDebitAccountDetails, setSelectedDebitAccountDetails] = useState(null); // Stores full balance API response
+  const [selectedDebitAccountDetails, setSelectedDebitAccountDetails] =
+    useState(null); // Stores full balance API response
   const [selectedPurchaseBalance, setSelectedPurchaseBalance] = useState(0);
   const [accountsLoading, setAccountsLoading] = useState(true);
   const [purchasesLoading, setPurchasesLoading] = useState(false);
@@ -29,25 +34,32 @@ export const usePaymentFormLogic = (initialSupplierId, initialPurchaseId, setGlo
   );
 
   // Shared function to fetch and set the selected debit account's balance
-  const fetchAndSetDebitAccountBalance = useCallback(async (accountId) => {
-    if (!accountId) {
-      setSelectedDebitAccountDetails(null);
-      return;
-    }
-    try {
-      const response = await fetch(`/api/accounts/${accountId}/balance?context=payment`);
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to fetch account balance');
+  const fetchAndSetDebitAccountBalance = useCallback(
+    async (accountId) => {
+      if (!accountId) {
+        setSelectedDebitAccountDetails(null);
+        return;
       }
-      const data = await response.json();
-      setSelectedDebitAccountDetails(data); // Store the full data object
-    } catch (error) {
-      console.error("Error fetching debit account balance:", error);
-      setSelectedDebitAccountDetails(null);
-      setGlobalError(`Error fetching account balance: ${error.message}`);
-    }
-  }, [setGlobalError]);
+      try {
+        const response = await fetch(
+          `/api/accounts/${accountId}/balance?context=payment`
+        );
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(
+            errorData.message || "Failed to fetch account balance"
+          );
+        }
+        const data = await response.json();
+        setSelectedDebitAccountDetails(data); // Store the full data object
+      } catch (error) {
+        console.error("Error fetching debit account balance:", error);
+        setSelectedDebitAccountDetails(null);
+        setGlobalError(`Error fetching account balance: ${error.message}`);
+      }
+    },
+    [setGlobalError]
+  );
 
   // Fetch initial data: Debit Accounts
   useEffect(() => {
@@ -59,12 +71,16 @@ export const usePaymentFormLogic = (initialSupplierId, initialPurchaseId, setGlo
         );
         if (!accountsResponse.ok) {
           const errorData = await accountsResponse.json();
-          throw new Error(errorData.message || 'Failed to fetch accounts');
+          throw new Error(errorData.message || "Failed to fetch accounts");
         }
         const accountsData = await accountsResponse.json();
         setDebitAccounts(accountsData.data || []);
 
-        if (initialSupplierId && accountsData.data && accountsData.data.length > 0) {
+        if (
+          initialSupplierId &&
+          accountsData.data &&
+          accountsData.data.length > 0
+        ) {
           const supplierAccount = accountsData.data.find(
             (acc) => acc.supplier?.id === parseInt(initialSupplierId)
           );
@@ -90,7 +106,9 @@ export const usePaymentFormLogic = (initialSupplierId, initialPurchaseId, setGlo
   // Fetch purchases when the selected debit account (and thus supplier) changes
   useEffect(() => {
     async function fetchPurchases() {
-      const currentSupplierId = getSupplierIdFromAccount(formData.debitAccountId);
+      const currentSupplierId = getSupplierIdFromAccount(
+        formData.debitAccountId
+      );
 
       if (currentSupplierId) {
         setPurchasesLoading(true);
@@ -100,20 +118,23 @@ export const usePaymentFormLogic = (initialSupplierId, initialPurchaseId, setGlo
           );
           if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.message || 'Failed to fetch purchases');
+            throw new Error(errorData.message || "Failed to fetch purchases");
           }
           const data = await response.json();
-          setPurchases(data);
 
-          if (initialPurchaseId && data.length > 0) {
-            const purchase = data.find(
+          // FIX: Use data.data instead of data
+          setPurchases(data.data || []); // <-- This was the issue!
+
+          if (initialPurchaseId && data.data && data.data.length > 0) {
+            const purchase = data.data.find(
+              // <-- And here too
               (p) => p.id === parseInt(initialPurchaseId)
             );
             if (purchase) {
               setSelectedPurchaseBalance(
                 purchase.totalAmount - purchase.paidAmount
               );
-              setFormData(prev => ({...prev, purchaseId: purchase.id})); // Ensure formData.purchaseId is set if it came from query
+              setFormData((prev) => ({ ...prev, purchaseId: purchase.id }));
             }
           }
         } catch (error) {
@@ -130,7 +151,12 @@ export const usePaymentFormLogic = (initialSupplierId, initialPurchaseId, setGlo
     }
 
     fetchPurchases();
-  }, [formData.debitAccountId, initialPurchaseId, getSupplierIdFromAccount, setGlobalError]);
+  }, [
+    formData.debitAccountId,
+    initialPurchaseId,
+    getSupplierIdFromAccount,
+    setGlobalError,
+  ]);
 
   // Handle debit account selection
   const handleDebitAccountChange = async (e) => {

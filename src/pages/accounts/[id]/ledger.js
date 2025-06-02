@@ -46,7 +46,7 @@ function EmptyLedgerState({ accountName }) {
         <p className="mt-1 text-sm text-slate-500">
           There are no entries recorded for {accountName}.
         </p>
-        <div className="inline-flex items-center  mt-6">
+        <div className="inline-flex items-center  mt-6">
           <div className="mx-2">
             <Link
               href="/transactions/payments"
@@ -175,8 +175,6 @@ export default function AccountLedgerPage({ initialData, error }) {
     );
   }
 
-  // Destructure accountCode from ledgerData and rename accountId to accountCode if needed
-  // Assuming your API response will include 'accountCode'
   const {
     accountName,
     accountType,
@@ -184,6 +182,12 @@ export default function AccountLedgerPage({ initialData, error }) {
     ledgerEntries,
     accountCode,
   } = ledgerData;
+
+  // Calculate the closing balance
+  const closingBalance =
+    ledgerEntries.length > 0
+      ? ledgerEntries[ledgerEntries.length - 1].runningBalance
+      : openingBalance;
 
   const handleExportPdf = () => {
     // TODO: Implement PDF export functionality here
@@ -334,6 +338,29 @@ export default function AccountLedgerPage({ initialData, error }) {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-slate-200">
+                  {/* Opening Balance Row */}
+                  <tr className="bg-slate-50 font-bold">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">
+                    </td>
+                    <td className="px-6 py-4 text-sm text-slate-700">
+                      Opening Balance
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-slate-900">
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-slate-900">
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-slate-900 font-semibold">
+                      {Math.abs(openingBalance).toFixed(2)}{" "}
+                      <span className="text-slate-500 text-xs">
+                        {getBalanceSuffix(openingBalance, accountType)}
+                      </span>
+                    </td>
+                  </tr>
+                  {/* Ledger Entries */}
                   {ledgerEntries.map((entry, index) => (
                     <tr
                       key={entry.id}
@@ -348,7 +375,6 @@ export default function AccountLedgerPage({ initialData, error }) {
                           year: "numeric",
                         })}
                       </td>
-                      {/* Displaying Transaction ID */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-800">
                           #{entry.transactionId}
@@ -384,6 +410,21 @@ export default function AccountLedgerPage({ initialData, error }) {
                       </td>
                     </tr>
                   ))}
+                  {/* Closing Balance Row */}
+                  <tr className="bg-blue-50 font-bold text-blue-800">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm"></td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm"></td>
+                    <td className="px-6 py-4 text-sm">Closing Balance</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm"></td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm"></td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm"></td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                      {Math.abs(closingBalance).toFixed(2)}{" "}
+                      <span className="text-blue-600 text-xs">
+                        {getBalanceSuffix(closingBalance, accountType)}
+                      </span>
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             </div>

@@ -12,7 +12,7 @@ export default function PurchaseSelection({ purchases, formData, handleChange, l
             stroke="currentColor"
             viewBox="0 0 24 24"
           >
-            <path
+            <path 
               strokeLinecap="round"
               strokeLinejoin="round"
               strokeWidth={2}

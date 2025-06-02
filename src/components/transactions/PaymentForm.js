@@ -25,6 +25,9 @@ export default function PaymentForm({
   loading,
 }) {
   const displaySupplierId = getSupplierIdFromAccount(formData.debitAccountId);
+console.log(formData.debitAccountId,"id");
+console.log(displaySupplierId,"id");
+console.log(purchases,"purchases");
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">

@@ -1,4 +1,3 @@
-// pages/api/payments/index.js
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -143,9 +142,6 @@ async function handlePost(req, res) {
     debitAccountId, // This is the account to be DEBITED (e.g., Trade Payables, an expense account)
   } = req.body;
 
-  // Validation (existing validation is good)
-  // ...
-
   try {
     const result = await prisma.$transaction(async (tx) => {
       // Verify debit account exists and is active (debitAccountId is correct)
@@ -282,13 +278,17 @@ async function handlePost(req, res) {
         })
       );
 
-      // Update purchase paid amount if linked to a purchase
+      // Update purchase paid amount and balance if linked to a purchase
       if (purchase) {
         await tx.purchase.update({
           where: { id: purchase.id },
           data: {
             paidAmount: {
               increment: parseFloat(amount),
+            },
+            // IMPORTANT: Decrement the balance as payment is made
+            balance: {
+              decrement: parseFloat(amount),
             },
           },
         });

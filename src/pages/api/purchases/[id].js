@@ -1,315 +1,338 @@
-// pages/api/purchases/[id].js
-import { PrismaClient } from '@prisma/client';
-
+import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 export default async function handler(req, res) {
   const { method } = req;
   const { id } = req.query;
 
-  if (!id) {
+  // Validate ID
+  const purchaseId = parseInt(id);
+  if (isNaN(purchaseId)) {
     return res.status(400).json({
       success: false,
-      message: 'Purchase ID is required.'
+      error: "Invalid purchase ID",
+      message: "Purchase ID must be a valid number",
     });
   }
 
   try {
     switch (method) {
-      case 'GET':
-        return await handleGet(req, res, parseInt(id));
-      case 'PUT':
-        return await handlePut(req, res, parseInt(id));
-      case 'DELETE':
-        return await handleDelete(req, res, parseInt(id));
+      case "GET":
+        return await handleGet(req, res, purchaseId);
+      case "PUT":
+        return await handleUpdate(req, res, purchaseId);
+      case "DELETE":
+        return await handleDelete(req, res, purchaseId);
       default:
-        res.setHeader('Allow', ['GET', 'PUT', 'DELETE']);
+        res.setHeader("Allow", ["GET", "PUT", "DELETE"]);
         return res.status(405).json({
           success: false,
-          message: `Method ${method} Not Allowed`
+          error: `Method ${method} not allowed`,
+          allowedMethods: ["GET", "PUT", "DELETE"],
+          message: "Use /api/purchases for creating new purchases",
         });
     }
   } catch (error) {
-    console.error('API Error:', error);
+    console.error("API Error:", error);
     return res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      error: "Internal server error",
+      message: error.message,
     });
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
-// GET /api/purchases/[id] - Get a single purchase by ID
-async function handleGet(req, res, id) {
+// GET /api/purchases/[id] - Fetch a specific purchase
+async function handleGet(req, res, purchaseId) {
+  const { includeDetails = "true" } = req.query;
+
   try {
-    const purchase = await prisma.purchase.findUnique({
-      where: { id: id },
-      include: {
-        supplier: {
-          select: {
-            id: true,
-            name: true,
-            phone: true,
-            address: true,
-          }
-        },
-        items: {
-          include: {
-            item: {
-              select: {
-                id: true,
-                name: true,
-                unit: true,
-              }
-            }
-          }
+    const include = includeDetails === "true" 
+      ? {
+          supplier: true,
+          items: {
+            include: {
+              item: true,
+            },
+            orderBy: {
+              id: 'asc',
+            },
+          },
+          payments: {
+            orderBy: {
+              date: 'desc',
+            },
+          },
+          transaction: {
+            include: {
+              entries: {
+                include: {
+                  account: true,
+                },
+              },
+            },
+          },
         }
-      }
+      : {
+          supplier: true,
+        };
+
+    const purchase = await prisma.purchase.findUnique({
+      where: { id: purchaseId },
+      include,
     });
 
     if (!purchase) {
       return res.status(404).json({
         success: false,
-        message: 'Purchase not found'
+        error: "Purchase not found",
+        message: `No purchase found with ID ${purchaseId}`,
       });
     }
 
     return res.status(200).json({
       success: true,
-      data: purchase
+      data: purchase,
     });
   } catch (error) {
-    console.error(`Error fetching purchase with ID ${id}:`, error);
+    console.error("GET Error:", error);
     return res.status(500).json({
       success: false,
-      message: 'Failed to fetch purchase'
+      error: "Failed to fetch purchase",
+      message: error.message,
     });
   }
 }
 
-// PUT /api/purchases/[id] - Update an existing purchase by ID
-async function handlePut(req, res, id) {
-  try {
-    const { supplierId, items, paidAmount, date } = req.body; // 'date' can also be updated
+// PUT /api/purchases/[id] - Update a specific purchase
+async function handleUpdate(req, res, purchaseId) {
+  const {
+    supplierId,
+    totalAmount,
+    date,
+    invoiceNo,
+    items = [],
+    notes,
+  } = req.body;
 
-    // Validate incoming data
-    const validation = validatePurchaseData({ supplierId, items, paidAmount });
-    if (!validation.isValid) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: validation.errors
-      });
-    }
-
-    // Check if purchase exists
-    const existingPurchase = await prisma.purchase.findUnique({
-      where: { id: id },
-      include: { items: true } // Include existing items to calculate old total
+  // Validation
+  if (!supplierId || !totalAmount || !date) {
+    return res.status(400).json({
+      success: false,
+      error: "Missing required fields",
+      message: "supplierId, totalAmount, and date are required",
     });
+  }
 
-    if (!existingPurchase) {
-      return res.status(404).json({
-        success: false,
-        message: 'Purchase not found'
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      // Check if purchase exists
+      const existingPurchase = await tx.purchase.findUnique({
+        where: { id: purchaseId },
+        include: {
+          items: true,
+          payments: true,
+        },
       });
-    }
 
-    // Calculate new total amount from items
-    let newTotalAmount = 0;
-    for (const item of items) {
-      const { quantity, rate, weightDeduction } = item;
-      if (typeof quantity !== 'number' || typeof rate !== 'number' || quantity <= 0 || rate < 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid quantity or rate for purchase items.'
-        });
+      if (!existingPurchase) {
+        throw new Error("Purchase not found");
       }
-      const actualQuantity = quantity - (weightDeduction || 0);
-      newTotalAmount += actualQuantity * rate;
-    }
 
-    const newPaidAmount = parseFloat(paidAmount);
-    const newBalance = newTotalAmount - newPaidAmount;
+      // Check if purchase has payments - if so, restrict certain updates
+      if (existingPurchase.payments.length > 0 && existingPurchase.totalAmount !== parseFloat(totalAmount)) {
+        throw new Error("Cannot modify total amount for purchase with existing payments");
+      }
 
-    // Calculate the change in balance for the supplier
-    const oldBalance = existingPurchase.totalAmount - existingPurchase.paidAmount;
-    const balanceChange = newBalance - oldBalance;
+      // Verify supplier exists if provided
+      if (supplierId && supplierId !== existingPurchase.supplierId) {
+        const supplier = await tx.supplier.findUnique({
+          where: { id: parseInt(supplierId) },
+        });
 
-    // Use a transaction for atomicity
-    const updatedPurchase = await prisma.$transaction(async (prisma) => {
-      // First, delete all existing PurchaseItems for this purchase
-      await prisma.purchaseItem.deleteMany({
-        where: { purchaseId: id },
-      });
+        if (!supplier) {
+          throw new Error("Supplier not found");
+        }
+      }
 
-      // Then, update the purchase record and create new PurchaseItems
-      const purchase = await prisma.purchase.update({
-        where: { id: id },
+      // Update purchase
+      const updatedPurchase = await tx.purchase.update({
+        where: { id: purchaseId },
         data: {
           supplierId: parseInt(supplierId),
-          totalAmount: newTotalAmount,
-          paidAmount: newPaidAmount,
-          balance: newBalance,
-          date: date ? new Date(date) : existingPurchase.date, // Update date if provided
-          items: {
-            create: items.map(item => ({
-              itemId: parseInt(item.itemId),
-              quantity: parseFloat(item.quantity),
-              weightDeduction: parseFloat(item.weightDeduction || 1.5),
-              rate: parseFloat(item.rate),
-              amount: (parseFloat(item.quantity) - parseFloat(item.weightDeduction || 1.5)) * parseFloat(item.rate)
-            }))
-          }
+          totalAmount: parseFloat(totalAmount),
+          date: new Date(date),
+          invoiceNo: invoiceNo || null,
+          notes: notes || null,
+          balance: parseFloat(totalAmount) - existingPurchase.paidAmount,
         },
-        include: {
-          supplier: true,
-          items: {
-            include: {
-              item: true
-            }
-          }
-        }
       });
 
-      // Update supplier balance based on the change
-      if (balanceChange !== 0) {
-        await prisma.supplier.update({
-          where: { id: existingPurchase.supplierId }, // Use existing supplierId to update
-          data: {
-            balance: {
-              increment: balanceChange // Adjust supplier balance
-            }
-          }
+      // Handle items update if provided
+      if (items && items.length > 0) {
+        // Delete existing items
+        await tx.purchaseItem.deleteMany({
+          where: { purchaseId: purchaseId },
+        });
+
+        // Create new items
+        const itemsData = items.map(item => ({
+          purchaseId: purchaseId,
+          itemId: parseInt(item.itemId),
+          quantity: parseFloat(item.quantity),
+          unitPrice: parseFloat(item.unitPrice),
+          totalPrice: parseFloat(item.quantity) * parseFloat(item.unitPrice),
+        }));
+
+        await tx.purchaseItem.createMany({
+          data: itemsData,
         });
       }
-      return purchase;
+
+      // Update transaction if exists
+      if (existingPurchase.transaction) {
+        await tx.transactionEntry.updateMany({
+          where: {
+            transactionId: existingPurchase.transaction.id,
+            type: 'DEBIT',
+          },
+          data: {
+            amount: parseFloat(totalAmount),
+          },
+        });
+
+        await tx.transactionEntry.updateMany({
+          where: {
+            transactionId: existingPurchase.transaction.id,
+            type: 'CREDIT',
+          },
+          data: {
+            amount: parseFloat(totalAmount),
+          },
+        });
+
+        await tx.transaction.update({
+          where: { id: existingPurchase.transaction.id },
+          data: {
+            amount: parseFloat(totalAmount),
+            description: `Purchase update - ${invoiceNo || `Purchase #${purchaseId}`}`,
+          },
+        });
+      }
+
+      return updatedPurchase;
+    });
+
+    // Fetch updated purchase with all relations
+    const purchase = await prisma.purchase.findUnique({
+      where: { id: purchaseId },
+      include: {
+        supplier: true,
+        items: {
+          include: {
+            item: true,
+          },
+        },
+        payments: {
+          orderBy: {
+            date: 'desc',
+          },
+        },
+      },
     });
 
     return res.status(200).json({
       success: true,
-      message: 'Purchase updated successfully',
-      data: updatedPurchase
+      data: purchase,
+      message: "Purchase updated successfully",
+    });
+  } catch (error) {
+    console.error("UPDATE Error:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to update purchase",
+      message: error.message,
+    });
+  }
+}
+
+// DELETE /api/purchases/[id] - Delete a specific purchase
+async function handleDelete(req, res, purchaseId) {
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      // Check if purchase exists
+      const existingPurchase = await tx.purchase.findUnique({
+        where: { id: purchaseId },
+        include: {
+          payments: true,
+          items: true,
+          transaction: {
+            include: {
+              entries: true,
+            },
+          },
+        },
+      });
+
+      if (!existingPurchase) {
+        throw new Error("Purchase not found");
+      }
+
+      // Check if purchase has payments
+      if (existingPurchase.payments.length > 0) {
+        throw new Error("Cannot delete purchase with existing payments. Please delete all payments first.");
+      }
+
+      // Delete related records in order (due to foreign key constraints)
+      
+      // 1. Delete purchase items
+      await tx.purchaseItem.deleteMany({
+        where: { purchaseId: purchaseId },
+      });
+
+      // 2. Delete transaction entries if transaction exists
+      if (existingPurchase.transaction) {
+        await tx.transactionEntry.deleteMany({
+          where: { transactionId: existingPurchase.transaction.id },
+        });
+
+        // 3. Delete transaction
+        await tx.transaction.delete({
+          where: { id: existingPurchase.transaction.id },
+        });
+      }
+
+      // 4. Finally delete the purchase
+      const deletedPurchase = await tx.purchase.delete({
+        where: { id: purchaseId },
+      });
+
+      return deletedPurchase;
     });
 
+    return res.status(200).json({
+      success: true,
+      data: result,
+      message: "Purchase deleted successfully",
+    });
   } catch (error) {
-    console.error(`Error updating purchase with ID ${id}:`, error);
-    if (error.code === 'P2025') { // Record not found
-      return res.status(404).json({
-        success: false,
-        message: 'Purchase not found.'
-      });
-    }
-    if (error.code === 'P2003') { // Foreign key constraint failed (e.g., invalid supplierId or itemId)
+    console.error("DELETE Error:", error);
+    
+    // Handle specific constraint errors
+    if (error.code === 'P2003') {
       return res.status(400).json({
         success: false,
-        message: 'Invalid supplier ID or item ID provided for update.'
+        error: "Cannot delete purchase",
+        message: "Purchase has related records that must be deleted first",
       });
     }
+
     return res.status(500).json({
       success: false,
-      message: 'Failed to update purchase'
+      error: "Failed to delete purchase",
+      message: error.message,
     });
   }
-}
-
-// DELETE /api/purchases/[id] - Delete a purchase by ID
-async function handleDelete(req, res, id) {
-  try {
-    // Check if purchase exists
-    const existingPurchase = await prisma.purchase.findUnique({
-      where: { id: id }
-    });
-
-    if (!existingPurchase) {
-      return res.status(404).json({
-        success: false,
-        message: 'Purchase not found'
-      });
-    }
-
-    // Use a transaction to ensure atomicity
-    const deletedPurchase = await prisma.$transaction(async (prisma) => {
-      // First, delete related PurchaseItems
-      await prisma.purchaseItem.deleteMany({
-        where: { purchaseId: id }
-      });
-
-      // Then delete the purchase itself
-      const purchase = await prisma.purchase.delete({
-        where: { id: id }
-      });
-
-      // Update supplier balance by deducting the purchase balance
-      await prisma.supplier.update({
-        where: { id: purchase.supplierId },
-        data: {
-          balance: {
-            decrement: purchase.balance
-          }
-        }
-      });
-      return purchase;
-    });
-
-    return res.status(200).json({
-      success: true,
-      message: 'Purchase deleted successfully',
-      data: deletedPurchase
-    });
-
-  } catch (error) {
-    console.error(`Error deleting purchase with ID ${id}:`, error);
-    if (error.code === 'P2025') {
-      return res.status(404).json({
-        success: false,
-        message: 'Purchase not found'
-      });
-    }
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to delete purchase'
-    });
-  }
-}
-
-// Validation helper function for Purchase data (duplicated for this file,
-// ideally you'd have a shared `utils/validation.js` in a larger project)
-function validatePurchaseData({ supplierId, items, paidAmount }) {
-  const errors = {};
-
-  if (!supplierId) {
-    errors.supplierId = 'Supplier ID is required.';
-  } else if (isNaN(parseInt(supplierId))) {
-    errors.supplierId = 'Supplier ID must be a valid number.';
-  }
-
-  if (!items || !Array.isArray(items) || items.length === 0) {
-    errors.items = 'At least one item is required for a purchase.';
-  } else {
-    items.forEach((item, index) => {
-      if (!item.itemId) {
-        errors[`items[${index}].itemId`] = 'Item ID is required.';
-      } else if (isNaN(parseInt(item.itemId))) {
-        errors[`items[${index}].itemId`] = 'Item ID must be a valid number.';
-      }
-      if (item.quantity === undefined || isNaN(parseFloat(item.quantity)) || parseFloat(item.quantity) <= 0) {
-        errors[`items[${index}].quantity`] = 'Quantity must be a positive number.';
-      }
-      if (item.rate === undefined || isNaN(parseFloat(item.rate)) || parseFloat(item.rate) < 0) {
-        errors[`items[${index}].rate`] = 'Rate must be a non-negative number.';
-      }
-      if (item.weightDeduction !== undefined && (isNaN(parseFloat(item.weightDeduction)) || parseFloat(item.weightDeduction) < 0)) {
-        errors[`items[${index}].weightDeduction`] = 'Weight deduction must be a non-negative number.';
-      }
-    });
-  }
-
-  if (paidAmount !== undefined && (isNaN(parseFloat(paidAmount)) || parseFloat(paidAmount) < 0)) {
-    errors.paidAmount = 'Paid amount must be a non-negative number.';
-  }
-
-  return {
-    isValid: Object.keys(errors).length === 0,
-    errors
-  };
 }
