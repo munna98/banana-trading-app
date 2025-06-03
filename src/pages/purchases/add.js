@@ -1,5 +1,6 @@
 // pages/purchases/add.js - UPDATED VERSION
 import { useRouter } from "next/router";
+import { useState } from "react"; // Import useState for managing collapsible state
 import ItemInputForm from "../../components/purchases/ItemInputForm";
 import ItemListTable from "../../components/purchases/ItemListTable";
 import PaymentSection from "../../components/purchases/PaymentSection";
@@ -32,6 +33,14 @@ export default function AddPurchase() {
     calculateTotalPaidAmount,
     handleSubmit: submitForm,
   } = usePurchaseForm();
+
+  // State to manage the collapsible payment section
+  const [isPaymentSectionCollapsed, setIsPaymentSectionCollapsed] = useState(true);
+
+  // Function to toggle the payment section's collapsed state
+  const togglePaymentSection = () => {
+    setIsPaymentSectionCollapsed(!isPaymentSectionCollapsed);
+  };
 
   const handleSubmit = async (e) => {
     const result = await submitForm(e);
@@ -108,6 +117,9 @@ export default function AddPurchase() {
                 setErrors={setErrors}
                 calculateTotalAmount={calculateTotalAmount}
                 calculateTotalPaidAmount={calculateTotalPaidAmount}
+                // New props for collapsibility
+                isCollapsed={isPaymentSectionCollapsed}
+                onToggleCollapse={togglePaymentSection}
               />
             </div>
 
