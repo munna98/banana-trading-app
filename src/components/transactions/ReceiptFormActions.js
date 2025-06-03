@@ -1,4 +1,4 @@
-export default function FormActions({ loading, formData, selectedDebitAccountDetails, router }) {
+export default function ReceiptFormActions({ loading, formData, selectedCreditAccountDetails, router }) {
   return (
     <div className="flex flex-col sm:flex-row gap-3 pt-4">
       <button
@@ -12,11 +12,11 @@ export default function FormActions({ loading, formData, selectedDebitAccountDet
         type="submit"
         disabled={
           loading ||
-          !formData.debitAccountId ||
+          !formData.creditAccountId ||
           parseFloat(formData.amount) <= 0 ||
-          (selectedDebitAccountDetails?.type === 'ASSET' && parseFloat(formData.amount) > selectedDebitAccountDetails.availableForPayment)
+          (selectedCreditAccountDetails?.type === 'LIABILITY' && parseFloat(formData.amount) > selectedCreditAccountDetails.availableForReceipt)
         }
-        className="flex-1 px-8 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-semibold rounded-xl hover:from-blue-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 focus:ring-2 focus:ring-blue-500"
+        className="flex-1 px-8 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white font-semibold rounded-xl hover:from-green-600 hover:to-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 focus:ring-2 focus:ring-green-500"
       >
         {loading ? (
           <div className="flex items-center justify-center">
@@ -54,10 +54,10 @@ export default function FormActions({ loading, formData, selectedDebitAccountDet
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth={2}
-                d="M5 13l4 4L19 7"
+                d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"
               />
             </svg>
-            Record Payment
+            Record Receipt
           </>
         )}
       </button>

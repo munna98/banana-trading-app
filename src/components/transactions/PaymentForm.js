@@ -6,7 +6,7 @@ import ReferenceInput from "./ReferenceInput";
 import PaymentAmountInput from "./PaymentAmountInput";
 import PaymentDateInput from "./PaymentDateInput";
 import NotesInput from "./NotesInput";
-import FormActions from "./FormActions";
+import PaymentFormActions from "./PaymentFormActions";
 
 export default function PaymentForm({
   formData, 
@@ -74,7 +74,7 @@ console.log(purchases,"purchases");
 
         <NotesInput formData={formData} handleChange={handleChange} />
 
-        <FormActions
+        <PaymentFormActions
           loading={loading}
           formData={formData}
           selectedDebitAccountDetails={selectedDebitAccountDetails}

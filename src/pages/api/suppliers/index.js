@@ -91,7 +91,7 @@ export default async function handler(req, res) {
         // 3. Create the new supplier, linking it to the newly created account
         const supplier = await prisma.supplier.create({
           data: {
-            name,
+            name, 
             phone,
             address,
             accountId: supplierAccount.id, // Link the supplier to its account

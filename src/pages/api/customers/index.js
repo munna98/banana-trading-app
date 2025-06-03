@@ -48,6 +48,7 @@ export default async function handler(req, res) {
           pagination: {
             total,
             page: parseInt(page),
+            page: parseInt(page),
             limit: parseInt(limit),
             totalPages: Math.ceil(total / parseInt(limit))
           }
@@ -88,6 +89,10 @@ export default async function handler(req, res) {
               parentId: tradeReceivablesAccount.id,
               description: `Account for customer: ${name}`,
               isActive: true,
+              // --- NEW: Set canDebitOnPayment and canCreditOnReceipt to true for customer accounts ---
+              canDebitOnPayment: true,
+              canCreditOnReceipt: true,
+              // --- END NEW ---
             }
           })
 

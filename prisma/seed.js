@@ -51,7 +51,7 @@ async function seedAccounts() {
       parentCode: '1110',
       openingBalance: 0.0,
       canDebitOnPayment: false,
-      canCreditOnReceipt: true,
+      canCreditOnReceipt: false,
       isSeeded: true 
     },
     {
@@ -62,7 +62,7 @@ async function seedAccounts() {
       parentCode: '1110',
       openingBalance: 0.0,
       canDebitOnPayment: false,
-      canCreditOnReceipt: true,
+      canCreditOnReceipt: false,
       isSeeded: true 
     },
     {
@@ -73,7 +73,7 @@ async function seedAccounts() {
       parentCode: '1100',
       openingBalance: 0.0,
       canDebitOnPayment: false,
-      canCreditOnReceipt: true,
+      canCreditOnReceipt: false,
       isSeeded: true 
     },
     {
@@ -84,7 +84,7 @@ async function seedAccounts() {
       parentCode: '1120',
       openingBalance: 0.0,
       canDebitOnPayment: false,
-      canCreditOnReceipt: true,
+      canCreditOnReceipt: false,
       isSeeded: true 
     },
     {
@@ -150,7 +150,7 @@ async function seedAccounts() {
       parentCode: '1200',
       openingBalance: 0.0,
       canDebitOnPayment: true,
-      canCreditOnReceipt: false,
+      canCreditOnReceipt: true,
       isSeeded: true 
     },
     {
@@ -161,7 +161,7 @@ async function seedAccounts() {
       parentCode: '1200',
       openingBalance: 0.0,
       canDebitOnPayment: true,
-      canCreditOnReceipt: false,
+      canCreditOnReceipt: true,
       isSeeded: true 
     },
     {
@@ -172,7 +172,7 @@ async function seedAccounts() {
       parentCode: '1200',
       openingBalance: 0.0,
       canDebitOnPayment: true,
-      canCreditOnReceipt: false,
+      canCreditOnReceipt: true,
       isSeeded: true 
     },
 
@@ -286,7 +286,7 @@ async function seedAccounts() {
       parentCode: '3000',
       openingBalance: 0.0,
       canDebitOnPayment: false,
-      canCreditOnReceipt: false,
+      canCreditOnReceipt: true,
       isSeeded: true 
     },
     {
@@ -297,7 +297,7 @@ async function seedAccounts() {
       parentCode: '3000',
       openingBalance: 0.0,
       canDebitOnPayment: false,
-      canCreditOnReceipt: false,
+      canCreditOnReceipt: true,
       isSeeded: true 
     },
     {
@@ -332,7 +332,7 @@ async function seedAccounts() {
       parentCode: '4000',
       openingBalance: 0.0,
       canDebitOnPayment: false,
-      canCreditOnReceipt: false,
+      canCreditOnReceipt: true,
       isSeeded: true 
     },
     {
@@ -343,7 +343,7 @@ async function seedAccounts() {
       parentCode: '4100',
       openingBalance: 0.0,
       canDebitOnPayment: false,
-      canCreditOnReceipt: false,
+      canCreditOnReceipt: true,
       isSeeded: true 
     },
     {
@@ -354,7 +354,7 @@ async function seedAccounts() {
       parentCode: '4100',
       openingBalance: 0.0,
       canDebitOnPayment: false,
-      canCreditOnReceipt: false,
+      canCreditOnReceipt: true,
       isSeeded: true 
     },
     {
@@ -365,7 +365,7 @@ async function seedAccounts() {
       parentCode: '4000',
       openingBalance: 0.0,
       canDebitOnPayment: false,
-      canCreditOnReceipt: false,
+      canCreditOnReceipt: true,
       isSeeded: true 
     },
     {
@@ -376,7 +376,7 @@ async function seedAccounts() {
       parentCode: '4200',
       openingBalance: 0.0,
       canDebitOnPayment: false,
-      canCreditOnReceipt: false,
+      canCreditOnReceipt: true,
       isSeeded: true 
     },
 
@@ -410,7 +410,7 @@ async function seedAccounts() {
       description: 'Cost of bananas bought for resale',
       parentCode: '5100',
       openingBalance: 0.0,
-      canDebitOnPayment: false,
+      canDebitOnPayment: true,
       canCreditOnReceipt: false,
       isSeeded: true 
     },
@@ -421,7 +421,7 @@ async function seedAccounts() {
       description: 'Transportation costs for incoming goods',
       parentCode: '5100',
       openingBalance: 0.0,
-      canDebitOnPayment: false,
+      canDebitOnPayment: true,
       canCreditOnReceipt: false,
       isSeeded: true 
     },
@@ -432,7 +432,7 @@ async function seedAccounts() {
       description: 'Regular business operating costs',
       parentCode: '5000',
       openingBalance: 0.0,
-      canDebitOnPayment: false,
+      canDebitOnPayment: true,
       canCreditOnReceipt: false,
       isSeeded: true 
     },
@@ -443,7 +443,7 @@ async function seedAccounts() {
       description: 'Warehouse and office rent',
       parentCode: '5200',
       openingBalance: 0.0,
-      canDebitOnPayment: false,
+      canDebitOnPayment: true,
       canCreditOnReceipt: false,
       isSeeded: true 
     },
@@ -454,7 +454,7 @@ async function seedAccounts() {
       description: 'Electricity, water, gas bills',
       parentCode: '5200',
       openingBalance: 0.0,
-      canDebitOnPayment: false,
+      canDebitOnPayment: true,
       canCreditOnReceipt: false,
       isSeeded: true 
     },
@@ -465,7 +465,7 @@ async function seedAccounts() {
       description: 'Delivery and vehicle costs',
       parentCode: '5200',
       openingBalance: 0.0,
-      canDebitOnPayment: false,
+      canDebitOnPayment: true,
       canCreditOnReceipt: false,
       isSeeded: true 
     },
@@ -476,7 +476,7 @@ async function seedAccounts() {
       description: 'Promotional and marketing costs',
       parentCode: '5200',
       openingBalance: 0.0,
-      canDebitOnPayment: false,
+      canDebitOnPayment: true,
       canCreditOnReceipt: false,
       isSeeded: true 
     },
@@ -487,7 +487,7 @@ async function seedAccounts() {
       description: 'Business insurance premiums',
       parentCode: '5200',
       openingBalance: 0.0,
-      canDebitOnPayment: false,
+      canDebitOnPayment: true,
       canCreditOnReceipt: false,
       isSeeded: true 
     },
@@ -498,7 +498,7 @@ async function seedAccounts() {
       description: 'Legal, accounting, consulting fees',
       parentCode: '5200',
       openingBalance: 0.0,
-      canDebitOnPayment: false,
+      canDebitOnPayment: true,
       canCreditOnReceipt: false,
       isSeeded: true 
     },
@@ -509,7 +509,7 @@ async function seedAccounts() {
       description: 'Banking fees and charges',
       parentCode: '5200',
       openingBalance: 0.0,
-      canDebitOnPayment: false,
+      canDebitOnPayment: true,
       canCreditOnReceipt: false,
       isSeeded: true 
     },
@@ -520,7 +520,7 @@ async function seedAccounts() {
       description: 'Stationery and office materials',
       parentCode: '5200',
       openingBalance: 0.0,
-      canDebitOnPayment: false,
+      canDebitOnPayment: true,
       canCreditOnReceipt: false,
       isSeeded: true 
     },
@@ -531,7 +531,7 @@ async function seedAccounts() {
       description: 'Equipment and facility maintenance',
       parentCode: '5200',
       openingBalance: 0.0,
-      canDebitOnPayment: false,
+      canDebitOnPayment: true,
       canCreditOnReceipt: false,
       isSeeded: true 
     },
@@ -542,7 +542,7 @@ async function seedAccounts() {
       description: 'Staff-related costs',
       parentCode: '5000',
       openingBalance: 0.0,
-      canDebitOnPayment: false,
+      canDebitOnPayment: true,
       canCreditOnReceipt: false,
       isSeeded: true 
     },
@@ -553,7 +553,7 @@ async function seedAccounts() {
       description: 'Employee compensation',
       parentCode: '5300',
       openingBalance: 0.0,
-      canDebitOnPayment: false,
+      canDebitOnPayment: true,
       canCreditOnReceipt: false,
       isSeeded: true 
     },
@@ -564,7 +564,7 @@ async function seedAccounts() {
       description: 'Health insurance, retirement contributions',
       parentCode: '5300',
       openingBalance: 0.0,
-      canDebitOnPayment: false,
+      canDebitOnPayment: true,
       canCreditOnReceipt: false,
       isSeeded: true 
     }
