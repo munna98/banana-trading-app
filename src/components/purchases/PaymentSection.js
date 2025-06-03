@@ -1,7 +1,7 @@
 // components/purchases/PaymentSection.js
 import PaymentInputSection from "./PaymentInputSection";
 import PaymentDisplaySection from "./PaymentDisplaySection";
-import { paymentMethods } from "../../lib/payments"; // You might still need this for initial state
+import { paymentMethods } from "../../lib/payments"; // Optional, keep if needed
 
 export default function PaymentSection({
   formData,
@@ -14,33 +14,49 @@ export default function PaymentSection({
   setErrors,
   calculateTotalAmount,
   calculateTotalPaidAmount,
+  isCollapsed,
+  onToggleCollapse,
 }) {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-      {/* Payment Input Section */}
-      <PaymentInputSection
-        formData={formData}
-        setFormData={setFormData}
-        newPayment={newPayment}
-        setNewPayment={setNewPayment}
-        editingPaymentIndex={editingPaymentIndex}
-        setEditingPaymentIndex={setEditingPaymentIndex}
-        errors={errors}
-        setErrors={setErrors}
-        calculateTotalAmount={calculateTotalAmount}
-        calculateTotalPaidAmount={calculateTotalPaidAmount}
-      />
+    <div className="mt-8 border-t border-slate-200 pt-6">
+      {/* Toggle Header */}
+      <div className="flex justify-between items-center cursor-pointer mb-4" onClick={onToggleCollapse}>
+        <h2 className="text-lg font-semibold text-slate-700">Payment Details</h2>
+        <button
+          type="button"
+          className="text-purple-600 hover:underline text-sm"
+        >
+          {isCollapsed ? "Expand" : "Collapse"}
+        </button>
+      </div>
 
-      {/* Payment Display Section */}
-      <PaymentDisplaySection
-        formData={formData}
-        setFormData={setFormData}
-        setNewPayment={setNewPayment}
-        setEditingPaymentIndex={setEditingPaymentIndex}
-        editingPaymentIndex={editingPaymentIndex}
-        calculateTotalAmount={calculateTotalAmount}
-        calculateTotalPaidAmount={calculateTotalPaidAmount}
-      />
+      {/* Conditionally Render Payment Sections */}
+      {!isCollapsed && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <PaymentInputSection
+            formData={formData}
+            setFormData={setFormData}
+            newPayment={newPayment}
+            setNewPayment={setNewPayment}
+            editingPaymentIndex={editingPaymentIndex}
+            setEditingPaymentIndex={setEditingPaymentIndex}
+            errors={errors}
+            setErrors={setErrors}
+            calculateTotalAmount={calculateTotalAmount}
+            calculateTotalPaidAmount={calculateTotalPaidAmount}
+          />
+
+          <PaymentDisplaySection
+            formData={formData}
+            setFormData={setFormData}
+            setNewPayment={setNewPayment}
+            setEditingPaymentIndex={setEditingPaymentIndex}
+            editingPaymentIndex={editingPaymentIndex}
+            calculateTotalAmount={calculateTotalAmount}
+            calculateTotalPaidAmount={calculateTotalPaidAmount}
+          />
+        </div>
+      )}
     </div>
   );
 }
