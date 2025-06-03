@@ -1,4 +1,4 @@
-export default function AccountSelection({ debitAccounts, formData, handleChange, loading }) {
+export default function PaymentAccountSelection({ debitAccounts, formData, handleChange, loading }) {
   return (
     <div>
       <label className="block text-sm font-semibold text-slate-700 mb-2">

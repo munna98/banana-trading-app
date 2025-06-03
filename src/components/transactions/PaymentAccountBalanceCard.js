@@ -1,4 +1,4 @@
-export default function AccountBalanceCard({ selectedDebitAccountDetails }) {
+export default function PaymentAccountBalanceCard({ selectedDebitAccountDetails }) {
   const balanceCardClasses = `rounded-2xl p-6 border ${
     selectedDebitAccountDetails.balanceType === 'negative' && selectedDebitAccountDetails.type !== 'LIABILITY'
       ? 'bg-red-50 to-red-100 border-red-200'

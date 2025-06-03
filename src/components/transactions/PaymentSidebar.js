@@ -1,4 +1,4 @@
-import AccountBalanceCard from "./AccountBalanceCard";
+import PaymentAccountBalanceCard from "./PaymentAccountBalanceCard";
 import PurchaseBalanceCard from "./PurchaseBalanceCard";
 import PaymentSummaryCard from "./PaymentSummaryCard";
 
@@ -6,7 +6,7 @@ export default function PaymentSidebar({ selectedDebitAccountDetails, selectedPu
   return (
     <div className="space-y-6 lg:col-span-1">
       {selectedDebitAccountDetails && (
-        <AccountBalanceCard selectedDebitAccountDetails={selectedDebitAccountDetails} />
+        <PaymentAccountBalanceCard selectedDebitAccountDetails={selectedDebitAccountDetails} />
       )}
 
       {selectedPurchaseBalance > 0 && (

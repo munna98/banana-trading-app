@@ -1,5 +1,5 @@
 import { paymentMethods, getReferencePlaceholder, isReferenceRequired } from "../../lib/payments";
-import AccountSelection from "./AccountSelection";
+import PaymentAccountSelection from "./PaymentAccountSelection";
 import PurchaseSelection from "./PurchaseSelection";
 import PaymentMethodSelection from "./PaymentMethodSelection";
 import ReferenceInput from "./ReferenceInput";
@@ -32,7 +32,7 @@ console.log(purchases,"purchases");
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
       <form onSubmit={handleSubmit} className="space-y-6">
-        <AccountSelection
+        <PaymentAccountSelection
           debitAccounts={debitAccounts}
           formData={formData}
           handleChange={handleDebitAccountChange}
