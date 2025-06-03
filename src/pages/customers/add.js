@@ -218,7 +218,7 @@ export default function AddCustomer() {
                       name="address"
                       value={formData.address}
                       onChange={handleChange}
-                      rows="3"
+                      rows="1"
                       className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 bg-slate-50 focus:bg-white resize-none"
                       placeholder="Enter customer address"
                     />
