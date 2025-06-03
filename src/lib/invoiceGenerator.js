@@ -4,52 +4,46 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 /**
- * Generates a unique invoice number based on a prefix and a daily sequence.
- * The sequence resets daily.
+ * Generates a unique invoice number based on a prefix and a continuously incrementing sequence.
+ * The sequence does not reset daily.
  * @param {string} prefix - The prefix for the invoice (e.g., "PUR", "SALE").
  * @returns {Promise<string>} The generated invoice number.
  */
 export async function generateInvoiceNumber(prefix) {
   const today = new Date();
-  today.setHours(0, 0, 0, 0); // Normalize to the beginning of the day
 
-  const formattedDate = today.toISOString().split('T')[0].replace(/-/g, ''); // YYYYMMDD
+  // Format date as DDMMYYYY
+  // Get day, month, and year components
+  const day = String(today.getDate()).padStart(2, '0'); // Ensures two digits (e.g., 01, 15)
+  const month = String(today.getMonth() + 1).padStart(2, '0'); // Month is 0-indexed, so add 1 and pad
+  const year = today.getFullYear();
+
+  // Combine into DDMMYYYY format
+  const formattedDate = `${day}${month}${year}`;
 
   let counter;
   await prisma.$transaction(async (tx) => {
-    // Find or create the counter for the given prefix
+    // Use upsert to find the counter for the given prefix or create it if it doesn't exist.
+    // If found, increment lastNumber. If created, set lastNumber to 1.
     counter = await tx.invoiceCounter.upsert({
-      where: { prefix },
-      update: {},
-      create: { prefix },
+      where: { prefix }, // Look for a counter with this prefix
+      update: {
+        // If the record exists, increment the lastNumber
+        lastNumber: {
+          increment: 1,
+        },
+      },
+      create: {
+        // If the record does not exist, create it with lastNumber starting at 1
+        prefix,
+        lastNumber: 1,
+      },
     });
-
-    // Check if the lastDate is not today, if so, reset the counter
-    const lastCounterDate = new Date(counter.lastDate);
-    lastCounterDate.setHours(0, 0, 0, 0);
-
-    if (lastCounterDate.getTime() !== today.getTime()) {
-      counter = await tx.invoiceCounter.update({
-        where: { prefix },
-        data: {
-          lastNumber: 1,
-          lastDate: today,
-        },
-      });
-    } else {
-      // Increment the counter for today
-      counter = await tx.invoiceCounter.update({
-        where: { prefix },
-        data: {
-          lastNumber: {
-            increment: 1,
-          },
-        },
-      });
-    }
   });
 
-  const sequenceNumber = String(counter.lastNumber).padStart(4, '0'); // Pad with leading zeros (e.g., 0001)
+  // Pad the sequence number with leading zeros to ensure it's always 4 digits (e.g., 1 becomes 0001)
+  const sequenceNumber = String(counter.lastNumber).padStart(4, '0');
 
+  // Construct the final invoice number
   return `${prefix}-${formattedDate}-${sequenceNumber}`;
 }
