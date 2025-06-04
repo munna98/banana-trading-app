@@ -1,4 +1,3 @@
-import React from 'react';
 
 export default function ItemListTable({ items, editItem, removeItem, calculateTotalAmount }) {
   if (!items || items.length === 0) {

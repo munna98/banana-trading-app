@@ -1,4 +1,4 @@
-// hooks/usePurchaseForm.js - Remove item input validation on form submit
+// hooks/usePurchaseForm.js
 import { useState } from "react";
 import { paymentMethods } from "../../lib/payments";
 
@@ -9,36 +9,63 @@ export function usePurchaseForm() {
     items: [],
     payments: [],
   });
-  
+
   const [errors, setErrors] = useState({});
   const [newItem, setNewItem] = useState({
-    itemId: "", quantity: "", rate: "", numberOfBunches: "",
+    itemId: "",
+    quantity: "",
+    rate: "",
+    numberOfBunches: "",
+    weightdeductionperunit: "1.5", // <--- ADD THIS LINE
   });
-  
+
   const [editingIndex, setEditingIndex] = useState(null);
   const [newPayment, setNewPayment] = useState({
-    amount: "", method: paymentMethods[0]?.value || "CASH", reference: "",
+    amount: "",
+    method: paymentMethods[0]?.value || "CASH",
+    reference: "",
   });
-  
+
   const [editingPaymentIndex, setEditingPaymentIndex] = useState(null);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    setErrors(prev => ({ ...prev, [name]: undefined }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    setErrors((prev) => ({ ...prev, [name]: undefined }));
   };
 
   const validateItem = () => {
     const currentItemErrors = {};
     if (!newItem.itemId) currentItemErrors.itemId = "Select an item.";
-    if (!newItem.quantity || isNaN(parseFloat(newItem.quantity)) || parseFloat(newItem.quantity) <= 0) {
+    if (
+      !newItem.quantity ||
+      isNaN(parseFloat(newItem.quantity)) ||
+      parseFloat(newItem.quantity) <= 0
+    ) {
       currentItemErrors.quantity = "Positive quantity required.";
     }
-    if (!newItem.rate || isNaN(parseFloat(newItem.rate)) || parseFloat(newItem.rate) < 0) {
+    if (
+      !newItem.weightdeductionperunit ||
+      isNaN(parseFloat(newItem.weightdeductionperunit)) ||
+      parseFloat(newItem.weightdeductionperunit) < 0
+    ) {
+      currentItemErrors.weightdeductionperunit =
+        "Non-negative weight cut is required.";
+    }
+    if (
+      !newItem.rate ||
+      isNaN(parseFloat(newItem.rate)) ||
+      parseFloat(newItem.rate) < 0
+    ) {
       currentItemErrors.rate = "Non-negative rate required.";
     }
-    if (newItem.numberOfBunches !== "" && (isNaN(parseInt(newItem.numberOfBunches)) || parseInt(newItem.numberOfBunches) < 0)) {
-      currentItemErrors.numberOfBunches = "Non-negative number of bunches required.";
+    if (
+      newItem.numberOfBunches !== "" &&
+      (isNaN(parseInt(newItem.numberOfBunches)) ||
+        parseInt(newItem.numberOfBunches) < 0)
+    ) {
+      currentItemErrors.numberOfBunches =
+        "Non-negative number of bunches required.";
     }
     return currentItemErrors;
   };
@@ -47,47 +74,66 @@ export function usePurchaseForm() {
     // Add safety check for items array
     if (!Array.isArray(items)) {
       console.error("Items parameter is not an array:", items);
-      setErrors(prev => ({ ...prev, general: "Items data not available. Please refresh the page." }));
+      setErrors((prev) => ({
+        ...prev,
+        general: "Items data not available. Please refresh the page.",
+      }));
       return;
     }
     console.log(items);
-    
+
     const itemErrors = validateItem();
     if (Object.keys(itemErrors).length > 0) {
-      setErrors(prev => ({ ...prev, currentItem: itemErrors }));
+      setErrors((prev) => ({ ...prev, currentItem: itemErrors }));
       return;
     }
-    
-    setErrors(prev => ({ ...prev, currentItem: undefined }));
-    
-    const itemInfo = items.find(i => i.id === parseInt(newItem.itemId));
+
+    setErrors((prev) => ({ ...prev, currentItem: undefined }));
+
+    const itemInfo = items.find((i) => i.id === parseInt(newItem.itemId));
     if (!itemInfo) {
-      setErrors(prev => ({ ...prev, currentItem: { itemId: "Selected item not found." } }));
+      setErrors((prev) => ({
+        ...prev,
+        currentItem: { itemId: "Selected item not found." },
+      }));
       return;
     }
 
     const quantity = parseFloat(newItem.quantity);
+    const weightdeductionperunit = parseFloat(newItem.weightdeductionperunit);
     const rate = parseFloat(newItem.rate);
     const numberOfBunches = parseInt(newItem.numberOfBunches || 0);
-    const weightDeduction = numberOfBunches * 1.5;
+    const weightDeduction = numberOfBunches * weightdeductionperunit;
     const effectiveQuantity = quantity - weightDeduction;
 
     const newItemData = {
-      itemId: parseInt(newItem.itemId), name: itemInfo.name, unit: itemInfo.unit,
-      quantity, rate, numberOfBunches, weightDeduction, effectiveQuantity,
+      itemId: parseInt(newItem.itemId),
+      name: itemInfo.name,
+      unit: itemInfo.unit,
+      quantity,
+      rate,
+      numberOfBunches,
+      weightDeduction,
+      effectiveQuantity,
       amount: effectiveQuantity * rate,
     };
 
     if (editingIndex !== null) {
       const updatedItems = [...formData.items];
       updatedItems[editingIndex] = newItemData;
-      setFormData(prev => ({ ...prev, items: updatedItems }));
+      setFormData((prev) => ({ ...prev, items: updatedItems }));
       setEditingIndex(null);
     } else {
-      setFormData(prev => ({ ...prev, items: [...prev.items, newItemData] }));
+      setFormData((prev) => ({ ...prev, items: [...prev.items, newItemData] }));
     }
 
-    setNewItem({ itemId: "", quantity: "", rate: "", numberOfBunches: "" });
+    setNewItem({
+      itemId: "",
+      quantity: "",
+      rate: "",
+      numberOfBunches: "",
+      weightdeductionperunit: "1.5", // <--- ALSO ADD THIS HERE for resetting the form
+    });
   };
 
   const editItem = (index) => {
@@ -95,6 +141,8 @@ export function usePurchaseForm() {
     setNewItem({
       itemId: item.itemId.toString(),
       quantity: item.quantity.toString(),
+      // Ensure weightdeductionperunit is set when editing, fallback to default if not present
+      weightdeductionperunit: item.weightDeductionPerUnit?.toString() || "1.5",
       rate: item.rate.toString(),
       numberOfBunches: item.numberOfBunches.toString(),
     });
@@ -102,33 +150,44 @@ export function usePurchaseForm() {
   };
 
   const cancelEdit = () => {
-    setNewItem({ itemId: "", quantity: "", rate: "", numberOfBunches: "" });
+    setNewItem({
+      itemId: "",
+      quantity: "",
+      rate: "",
+      numberOfBunches: "",
+      weightdeductionperunit: "1.5", // <--- ALSO ADD THIS HERE
+    });
     setEditingIndex(null);
   };
 
   const removeItem = (index) => {
-    setFormData(prev => ({ ...prev, items: prev.items.filter((_, i) => i !== index) }));
+    setFormData((prev) => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index),
+    }));
     if (editingIndex === index) {
       cancelEdit();
     } else if (editingIndex > index) {
-      setEditingIndex(prev => prev - 1);
+      setEditingIndex((prev) => prev - 1);
     }
   };
 
-  const calculateTotalAmount = () => formData.items.reduce((sum, item) => sum + item.amount, 0);
-  const calculateTotalPaidAmount = () => formData.payments.reduce((sum, payment) => sum + payment.amount, 0);
+  const calculateTotalAmount = () =>
+    formData.items.reduce((sum, item) => sum + item.amount, 0);
+  const calculateTotalPaidAmount = () =>
+    formData.payments.reduce((sum, payment) => sum + payment.amount, 0);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     // UPDATED: Only validate form-level requirements, not current item input fields
     const newErrors = {};
-    
+
     // Check if supplier is selected
     if (!formData.supplierId) {
       newErrors.supplierId = "Supplier is required.";
     }
-    
+
     // Check if at least one item exists in the items table
     if (formData.items.length === 0) {
       newErrors.items = "At least one item is required.";
@@ -139,7 +198,11 @@ export function usePurchaseForm() {
     const totalPaidAmount = calculateTotalPaidAmount();
 
     if (totalPaidAmount > totalPurchaseAmount) {
-      newErrors.payments = `Total paid amount (${totalPaidAmount.toFixed(2)}) cannot exceed total purchase amount (${totalPurchaseAmount.toFixed(2)}).`;
+      newErrors.payments = `Total paid amount (${totalPaidAmount.toFixed(
+        2
+      )}) cannot exceed total purchase amount (${totalPurchaseAmount.toFixed(
+        2
+      )}).`;
     }
 
     // REMOVED: No validation of current item input fields (newItem)
@@ -155,10 +218,10 @@ export function usePurchaseForm() {
     const payload = {
       supplierId: parseInt(formData.supplierId),
       date: formData.date,
-      items: formData.items.map(item => ({
-        itemId: item.itemId, 
-        quantity: item.quantity, 
-        rate: item.rate, 
+      items: formData.items.map((item) => ({
+        itemId: item.itemId,
+        quantity: item.quantity,
+        rate: item.rate,
         weightDeduction: item.weightDeduction,
       })),
       payments: formData.payments,
@@ -177,7 +240,11 @@ export function usePurchaseForm() {
         return { success: true, data: data.data };
       } else {
         const errorData = await res.json();
-        setErrors(errorData.errors || { general: errorData.message || "Failed to create purchase." });
+        setErrors(
+          errorData.errors || {
+            general: errorData.message || "Failed to create purchase.",
+          }
+        );
         alert("Error: " + (errorData.message || "Failed to create purchase."));
         return { success: false };
       }
@@ -189,9 +256,24 @@ export function usePurchaseForm() {
   };
 
   return {
-    formData, newItem, newPayment, editingIndex, editingPaymentIndex, errors,
-    setFormData, setNewItem, setNewPayment, setEditingPaymentIndex, setErrors,
-    handleInputChange, addItemToList, editItem, cancelEdit, removeItem,
-    calculateTotalAmount, calculateTotalPaidAmount, handleSubmit,
+    formData,
+    newItem,
+    newPayment,
+    editingIndex,
+    editingPaymentIndex,
+    errors,
+    setFormData,
+    setNewItem,
+    setNewPayment,
+    setEditingPaymentIndex,
+    setErrors,
+    handleInputChange,
+    addItemToList,
+    editItem,
+    cancelEdit,
+    removeItem,
+    calculateTotalAmount,
+    calculateTotalPaidAmount,
+    handleSubmit,
   };
 }
