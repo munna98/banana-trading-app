@@ -74,16 +74,19 @@ model Purchase {
 }
 
 model PurchaseItem {
-  id              Int     @id @default(autoincrement())
-  purchaseId      Int
-  itemId          Int
-  quantity        Float
-  weightDeduction Float   @default(1.5)
-  rate            Float
-  amount          Float
+  id                      Int     @id @default(autoincrement())
+  purchaseId              Int
+  itemId                  Int
+  quantity                Float
+  weightDeductionPerUnit  Float // Add this new field
+  totalWeightDeduction    Float // Add this new field
+  effectiveQuantity       Float // Add this new field
+  numberOfBunches         Int?  
+  rate                    Float
+  amount                  Float
 
   purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-  item     Item     @relation(fields: [itemId], references: [id])
+  item     Item    @relation(fields: [itemId], references: [id])
 }
 
 model Sale {

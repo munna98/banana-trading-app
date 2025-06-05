@@ -16,7 +16,8 @@ export function usePurchaseForm() {
     quantity: "",
     rate: "",
     numberOfBunches: "",
-    weightdeductionperunit: "1.5", // <--- ADD THIS LINE
+    // Corrected to camelCase: weightDeductionPerUnit
+    weightDeductionPerUnit: "1.5", // <--- CORRECTED LINE
   });
 
   const [editingIndex, setEditingIndex] = useState(null);
@@ -44,12 +45,13 @@ export function usePurchaseForm() {
     ) {
       currentItemErrors.quantity = "Positive quantity required.";
     }
+    // Corrected to camelCase: weightDeductionPerUnit
     if (
-      !newItem.weightdeductionperunit ||
-      isNaN(parseFloat(newItem.weightdeductionperunit)) ||
-      parseFloat(newItem.weightdeductionperunit) < 0
+      !newItem.weightDeductionPerUnit ||
+      isNaN(parseFloat(newItem.weightDeductionPerUnit)) ||
+      parseFloat(newItem.weightDeductionPerUnit) < 0
     ) {
-      currentItemErrors.weightdeductionperunit =
+      currentItemErrors.weightDeductionPerUnit = // <--- CORRECTED LINE
         "Non-negative weight cut is required.";
     }
     if (
@@ -100,11 +102,14 @@ export function usePurchaseForm() {
     }
 
     const quantity = parseFloat(newItem.quantity);
-    const weightdeductionperunit = parseFloat(newItem.weightdeductionperunit);
+    // Corrected to camelCase: weightDeductionPerUnit
+    const weightDeductionPerUnit = parseFloat(newItem.weightDeductionPerUnit); // <--- CORRECTED LINE
     const rate = parseFloat(newItem.rate);
     const numberOfBunches = parseInt(newItem.numberOfBunches || 0);
-    const weightDeduction = numberOfBunches * weightdeductionperunit;
-    const effectiveQuantity = quantity - weightDeduction;
+
+    // Calculate totalWeightDeduction and effectiveQuantity here
+    const totalWeightDeduction = numberOfBunches * weightDeductionPerUnit; // Use totalWeightDeduction here
+    const effectiveQuantity = quantity - totalWeightDeduction; // Use totalWeightDeduction here
 
     const newItemData = {
       itemId: parseInt(newItem.itemId),
@@ -113,8 +118,9 @@ export function usePurchaseForm() {
       quantity,
       rate,
       numberOfBunches,
-      weightDeduction,
-      effectiveQuantity,
+      weightDeductionPerUnit, // <--- Add this field to the item data
+      totalWeightDeduction, // <--- Add this field to the item data
+      effectiveQuantity, // <--- Add this field to the item data
       amount: effectiveQuantity * rate,
     };
 
@@ -132,7 +138,8 @@ export function usePurchaseForm() {
       quantity: "",
       rate: "",
       numberOfBunches: "",
-      weightdeductionperunit: "1.5", // <--- ALSO ADD THIS HERE for resetting the form
+      // Corrected to camelCase: weightDeductionPerUnit
+      weightDeductionPerUnit: "1.5", // <--- CORRECTED LINE for resetting the form
     });
   };
 
@@ -141,8 +148,8 @@ export function usePurchaseForm() {
     setNewItem({
       itemId: item.itemId.toString(),
       quantity: item.quantity.toString(),
-      // Ensure weightdeductionperunit is set when editing, fallback to default if not present
-      weightdeductionperunit: item.weightDeductionPerUnit?.toString() || "1.5",
+      // Ensure weightDeductionPerUnit is set when editing, fallback to default if not present
+      weightDeductionPerUnit: item.weightDeductionPerUnit?.toString() || "1.5", // <--- CORRECTED LINE
       rate: item.rate.toString(),
       numberOfBunches: item.numberOfBunches.toString(),
     });
@@ -155,7 +162,8 @@ export function usePurchaseForm() {
       quantity: "",
       rate: "",
       numberOfBunches: "",
-      weightdeductionperunit: "1.5", // <--- ALSO ADD THIS HERE
+      // Corrected to camelCase: weightDeductionPerUnit
+      weightDeductionPerUnit: "1.5", // <--- CORRECTED LINE
     });
     setEditingIndex(null);
   };
@@ -222,7 +230,11 @@ export function usePurchaseForm() {
         itemId: item.itemId,
         quantity: item.quantity,
         rate: item.rate,
-        weightDeduction: item.weightDeduction,
+        // Ensure all new fields are sent in the payload
+        weightDeductionPerUnit: item.weightDeductionPerUnit, // <--- CORRECTED LINE
+        totalWeightDeduction: item.totalWeightDeduction, // <--- CORRECTED LINE
+        effectiveQuantity: item.effectiveQuantity, // <--- CORRECTED LINE
+        numberOfBunches: item.numberOfBunches, // Ensure this is also sent
       })),
       payments: formData.payments,
     };

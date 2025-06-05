@@ -1,3 +1,4 @@
+// pages/api/purchases/[id].js
 import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
@@ -49,35 +50,36 @@ async function handleGet(req, res, purchaseId) {
   const { includeDetails = "true" } = req.query;
 
   try {
-    const include = includeDetails === "true" 
-      ? {
-          supplier: true,
-          items: {
-            include: {
-              item: true,
+    const include =
+      includeDetails === "true"
+        ? {
+            supplier: true,
+            items: {
+              include: {
+                item: true,
+              },
+              orderBy: {
+                id: "asc",
+              },
             },
-            orderBy: {
-              id: 'asc',
+            payments: {
+              orderBy: {
+                date: "desc",
+              },
             },
-          },
-          payments: {
-            orderBy: {
-              date: 'desc',
-            },
-          },
-          transaction: {
-            include: {
-              entries: {
-                include: {
-                  account: true,
+            transaction: {
+              include: {
+                entries: {
+                  include: {
+                    account: true,
+                  },
                 },
               },
             },
-          },
-        }
-      : {
-          supplier: true,
-        };
+          }
+        : {
+            supplier: true,
+          };
 
     const purchase = await prisma.purchase.findUnique({
       where: { id: purchaseId },
@@ -110,19 +112,36 @@ async function handleGet(req, res, purchaseId) {
 async function handleUpdate(req, res, purchaseId) {
   const {
     supplierId,
-    totalAmount,
     date,
     invoiceNo,
-    items = [],
+    items = [], // Now expecting items from frontend
     notes,
   } = req.body;
 
+  // Recalculate totalAmount from items received
+  let newTotalAmount = 0;
+  for (const item of items) {
+    // Ensure numbers are parsed for calculation
+    const quantity = parseFloat(item.quantity);
+    const rate = parseFloat(item.rate);
+    const totalWeightDeduction = parseFloat(item.totalWeightDeduction || 0); // Use totalWeightDeduction
+    const effectiveQuantity = quantity - totalWeightDeduction;
+    newTotalAmount += effectiveQuantity * rate;
+  }
+
   // Validation
-  if (!supplierId || !totalAmount || !date) {
+  if (!supplierId || !date) {
     return res.status(400).json({
       success: false,
       error: "Missing required fields",
-      message: "supplierId, totalAmount, and date are required",
+      message: "supplierId and date are required",
+    });
+  }
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: "Missing required items",
+      message: "At least one item is required for a purchase.",
     });
   }
 
@@ -134,6 +153,7 @@ async function handleUpdate(req, res, purchaseId) {
         include: {
           items: true,
           payments: true,
+          transaction: true, // Include transaction to potentially update it
         },
       });
 
@@ -141,13 +161,19 @@ async function handleUpdate(req, res, purchaseId) {
         throw new Error("Purchase not found");
       }
 
-      // Check if purchase has payments - if so, restrict certain updates
-      if (existingPurchase.payments.length > 0 && existingPurchase.totalAmount !== parseFloat(totalAmount)) {
-        throw new Error("Cannot modify total amount for purchase with existing payments");
+      // Check if purchase has payments - if so, restrict changing total amount significantly
+      // We are now recalculating totalAmount based on new items, so this check needs adjustment.
+      // A more robust solution might involve disallowing item changes if payments exist,
+      // or handling balance adjustments more explicitly. For now, we'll allow item changes
+      // but warn/error if the new totalAmount drastically changes the balance.
+      // This is a simplification. In a real app, you'd have more complex accounting logic.
+      if (existingPurchase.payments.length > 0 && Math.abs(newTotalAmount - existingPurchase.totalAmount) > 0.01) { // Allow for tiny floating point differences
+        throw new Error("Cannot significantly change total amount for purchase with existing payments. Please delete all payments first.");
       }
 
+
       // Verify supplier exists if provided
-      if (supplierId && supplierId !== existingPurchase.supplierId) {
+      if (supplierId && parseInt(supplierId) !== existingPurchase.supplierId) {
         const supplier = await tx.supplier.findUnique({
           where: { id: parseInt(supplierId) },
         });
@@ -162,65 +188,63 @@ async function handleUpdate(req, res, purchaseId) {
         where: { id: purchaseId },
         data: {
           supplierId: parseInt(supplierId),
-          totalAmount: parseFloat(totalAmount),
+          totalAmount: newTotalAmount, // Use the recalculated totalAmount
           date: new Date(date),
           invoiceNo: invoiceNo || null,
           notes: notes || null,
-          balance: parseFloat(totalAmount) - existingPurchase.paidAmount,
+          balance: newTotalAmount - existingPurchase.paidAmount, // Update balance based on new totalAmount
         },
       });
 
-      // Handle items update if provided
-      if (items && items.length > 0) {
-        // Delete existing items
-        await tx.purchaseItem.deleteMany({
-          where: { purchaseId: purchaseId },
-        });
+      // Handle items update: Delete existing and create new ones
+      // This is a common strategy for updating nested lists in Prisma
+      await tx.purchaseItem.deleteMany({
+        where: { purchaseId: purchaseId },
+      });
 
-        // Create new items
-        const itemsData = items.map(item => ({
-          purchaseId: purchaseId,
-          itemId: parseInt(item.itemId),
-          quantity: parseFloat(item.quantity),
-          unitPrice: parseFloat(item.unitPrice),
-          totalPrice: parseFloat(item.quantity) * parseFloat(item.unitPrice),
-        }));
+      const itemsData = items.map((item) => ({
+        purchaseId: purchaseId,
+        itemId: parseInt(item.itemId),
+        quantity: parseFloat(item.quantity),
+        rate: parseFloat(item.rate),
+        numberOfBunches: parseInt(item.numberOfBunches || 0), // New field
+        weightDeductionPerUnit: parseFloat(item.weightDeductionPerUnit || 0), // New field
+        totalWeightDeduction: parseFloat(item.totalWeightDeduction || 0), // New field
+        effectiveQuantity: parseFloat(item.effectiveQuantity), // New field
+        amount: parseFloat(item.amount), // Use the amount calculated on frontend, or recalculate here
+      }));
 
-        await tx.purchaseItem.createMany({
-          data: itemsData,
-        });
-      }
+      await tx.purchaseItem.createMany({
+        data: itemsData,
+      });
 
-      // Update transaction if exists
-      if (existingPurchase.transaction) {
+      // Update transaction if exists and totalAmount changed
+      if (existingPurchase.transaction && newTotalAmount !== existingPurchase.totalAmount) {
+        // Update relevant transaction entries
         await tx.transactionEntry.updateMany({
           where: {
             transactionId: existingPurchase.transaction.id,
-            type: 'DEBIT',
+            // Assuming the original debit was for the expense account
+            // and the original credit was for the supplier's payable account
+            OR: [
+              { type: 'DEBIT' }, // Adjusting the expense debit
+              { type: 'CREDIT', account: { supplierId: parseInt(supplierId) } } // Adjusting supplier liability
+            ]
           },
           data: {
-            amount: parseFloat(totalAmount),
-          },
-        });
-
-        await tx.transactionEntry.updateMany({
-          where: {
-            transactionId: existingPurchase.transaction.id,
-            type: 'CREDIT',
-          },
-          data: {
-            amount: parseFloat(totalAmount),
+            amount: newTotalAmount, // Update the amount for both debit and credit entries related to the total purchase
           },
         });
 
         await tx.transaction.update({
           where: { id: existingPurchase.transaction.id },
           data: {
-            amount: parseFloat(totalAmount),
+            amount: newTotalAmount,
             description: `Purchase update - ${invoiceNo || `Purchase #${purchaseId}`}`,
           },
         });
       }
+
 
       return updatedPurchase;
     });
@@ -237,7 +261,16 @@ async function handleUpdate(req, res, purchaseId) {
         },
         payments: {
           orderBy: {
-            date: 'desc',
+            date: "desc",
+          },
+        },
+        transaction: {
+          include: {
+            entries: {
+              include: {
+                account: true,
+              },
+            },
           },
         },
       },
@@ -259,6 +292,7 @@ async function handleUpdate(req, res, purchaseId) {
 }
 
 // DELETE /api/purchases/[id] - Delete a specific purchase
+// No changes needed here related to the new item fields, as deletion logic remains the same.
 async function handleDelete(req, res, purchaseId) {
   try {
     const result = await prisma.$transaction(async (tx) => {
@@ -286,7 +320,7 @@ async function handleDelete(req, res, purchaseId) {
       }
 
       // Delete related records in order (due to foreign key constraints)
-      
+
       // 1. Delete purchase items
       await tx.purchaseItem.deleteMany({
         where: { purchaseId: purchaseId },
@@ -319,7 +353,7 @@ async function handleDelete(req, res, purchaseId) {
     });
   } catch (error) {
     console.error("DELETE Error:", error);
-    
+
     // Handle specific constraint errors
     if (error.code === 'P2003') {
       return res.status(400).json({

@@ -22,7 +22,7 @@ export default function PurchaseItems({ items, formatCurrency }) {
           </thead>
           <tbody className="bg-white divide-y divide-slate-200">
             {items.map((item, index) => (
-              <tr key={index} className="hover:bg-slate-50">
+              <tr key={item.id || index} className="hover:bg-slate-50">
                 <td className="px-6 py-4">
                   <div className="font-medium text-slate-900">{item.item?.name || 'Unknown Item'}</div>
                   {item.item?.description && (
@@ -30,9 +30,11 @@ export default function PurchaseItems({ items, formatCurrency }) {
                   )}
                 </td>
                 <td className="px-6 py-4 text-slate-900">{item.quantity}</td>
-                <td className="px-6 py-4 text-slate-900">{item.item?.netWeight || '-'}</td>
-                <td className="px-6 py-4 text-slate-900">{formatCurrency(item.unitPrice)}</td>
-                <td className="px-6 py-4 font-semibold text-slate-900">{formatCurrency(item.totalPrice)}</td>
+                <td className="px-6 py-4 text-slate-900">
+                  {typeof item.effectiveQuantity === 'number' ? item.effectiveQuantity.toFixed(2) : '-'}
+                </td>
+                <td className="px-6 py-4 text-slate-900">{formatCurrency(item.rate)}</td>
+                <td className="px-6 py-4 font-semibold text-slate-900">{formatCurrency(item.amount)}</td>
               </tr>
             ))}
           </tbody>

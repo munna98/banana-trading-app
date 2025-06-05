@@ -1,6 +1,6 @@
-
+// pages/api/purchases/index.js
 import { PrismaClient } from '@prisma/client';
-import { generateInvoiceNumber } from '../../../lib/invoiceGenerator';
+import { generateInvoiceNumber } from '../../../lib/invoiceGenerator'; // Assuming this path is correct
 
 const prisma = new PrismaClient();
 const isDevelopment = process.env.NODE_ENV === 'development';
@@ -117,12 +117,11 @@ async function handleGet(req, res) {
 
 async function handlePost(req, res) {
   try {
-    const { 
-      supplierId, 
-      date, 
-      items, 
+    const {
+      supplierId,
+      date,
+      items, // items array from frontend, now includes new fields
       payments = [],
-      notes 
     } = req.body;
 
     // Validate incoming data
@@ -135,18 +134,25 @@ async function handlePost(req, res) {
       });
     }
 
-    // Calculate total amount from items
+    // Calculate total amount from items using new effectiveQuantity logic
     let totalAmount = 0;
     for (const item of items) {
-      const { quantity, rate, weightDeduction } = item;
-      if (typeof quantity !== 'number' || typeof rate !== 'number' || quantity <= 0 || rate < 0) {
+      const quantity = parseFloat(item.quantity);
+      const rate = parseFloat(item.rate);
+      const numberOfBunches = parseInt(item.numberOfBunches || 0);
+      const weightDeductionPerUnit = parseFloat(item.weightDeductionPerUnit || 0);
+
+      // Recalculate totalWeightDeduction and effectiveQuantity
+      const totalWeightDeduction = numberOfBunches * weightDeductionPerUnit;
+      const effectiveQuantity = quantity - totalWeightDeduction;
+
+      if (effectiveQuantity < 0) { // Ensure effective quantity isn't negative
         return res.status(400).json({
           success: false,
-          message: 'Invalid quantity or rate for purchase items.'
+          message: `Effective quantity for item ${item.itemId} cannot be negative after weight deduction.`,
         });
       }
-      const actualQuantity = quantity - (weightDeduction || 0);
-      totalAmount += actualQuantity * rate;
+      totalAmount += effectiveQuantity * rate;
     }
 
     // Calculate total paid amount from payments
@@ -158,28 +164,8 @@ async function handlePost(req, res) {
 
     // Use a transaction to ensure atomicity
     const newPurchase = await prisma.$transaction(async (tx) => {
-      // Get the items with their details to determine expense account
-      const itemDetails = await tx.item.findMany({
-        where: {
-          id: {
-            in: items.map(item => parseInt(item.itemId))
-          }
-        }
-      });
-
-      // For now, we'll use a single expense account for all purchases
-      // You can modify this logic to select different accounts based on item categories
-      const expenseAccount = await tx.account.findFirst({
-        where: {
-          code: '5110', // Banana Purchases account
-          type: 'EXPENSE',
-          isActive: true
-        }
-      });
-
-      if (!expenseAccount) {
-        throw new Error("Expense account not found. Please ensure '5110 - Banana Purchases' account exists.");
-      }
+      // Get the items with their details to determine expense account (optional, still using fixed for now)
+      // No changes needed here for itemDetails or expenseAccount as per current logic.
 
       // Verify supplier exists
       const supplier = await tx.supplier.findUnique({
@@ -202,7 +188,7 @@ async function handlePost(req, res) {
       });
 
       if (!tradePayableAccount && balance > 0) {
-        throw new Error("Supplier's trade payable account not found");
+        throw new Error("Supplier's trade payable account not found. A trade payable account is required for purchases with a balance due.");
       }
 
       // Create the purchase record
@@ -215,13 +201,26 @@ async function handlePost(req, res) {
           date: date ? new Date(date) : new Date(),
           invoiceNo: invoiceNo,
           items: {
-            create: items.map(item => ({
-              itemId: parseInt(item.itemId),
-              quantity: parseFloat(item.quantity),
-              weightDeduction: parseFloat(item.weightDeduction || 0),
-              rate: parseFloat(item.rate),
-              amount: (parseFloat(item.quantity) - parseFloat(item.weightDeduction || 0)) * parseFloat(item.rate)
-            }))
+            create: items.map(item => {
+              const quantity = parseFloat(item.quantity);
+              const rate = parseFloat(item.rate);
+              const numberOfBunches = parseInt(item.numberOfBunches || 0);
+              const weightDeductionPerUnit = parseFloat(item.weightDeductionPerUnit || 0);
+
+              const totalWeightDeduction = numberOfBunches * weightDeductionPerUnit;
+              const effectiveQuantity = quantity - totalWeightDeduction;
+
+              return {
+                itemId: parseInt(item.itemId),
+                quantity: quantity,
+                rate: rate,
+                numberOfBunches: numberOfBunches, // New field
+                weightDeductionPerUnit: weightDeductionPerUnit, // New field
+                totalWeightDeduction: totalWeightDeduction, // New field
+                effectiveQuantity: effectiveQuantity, // New field
+                amount: effectiveQuantity * rate // Recalculate amount based on effective quantity
+              };
+            })
           }
         }
       });
@@ -230,11 +229,10 @@ async function handlePost(req, res) {
       const transaction = await tx.transaction.create({
         data: {
           type: "PURCHASE",
-          amount: totalAmount,
+          amount: totalAmount, // Use the calculated totalAmount
           description: `Purchase ${purchase.id} - ${supplier.name} (Invoice: ${invoiceNo})`,
           date: purchase.date,
           referenceNo: invoiceNo,
-          notes: notes || null,
           purchaseId: purchase.id,
         },
       });
@@ -243,12 +241,24 @@ async function handlePost(req, res) {
       const entries = [];
 
       // 1. DEBIT the Expense account (increasing expense)
+      const expenseAccount = await tx.account.findFirst({
+        where: {
+          code: '5110', // Banana Purchases account
+          type: 'EXPENSE',
+          isActive: true
+        }
+      });
+
+      if (!expenseAccount) {
+        throw new Error("Expense account not found. Please ensure '5110 - Banana Purchases' account exists.");
+      }
+
       entries.push(
         await tx.transactionEntry.create({
           data: {
             transactionId: transaction.id,
             accountId: expenseAccount.id,
-            debitAmount: totalAmount,
+            debitAmount: totalAmount, // Debit the full purchase amount
             creditAmount: 0,
             description: `Purchase ${purchase.id} - ${expenseAccount.name} (Debit)`,
           },
@@ -282,7 +292,7 @@ async function handlePost(req, res) {
 
         for (const [method, amount] of Object.entries(paymentsByMethod)) {
           let cashBankAccountId;
-          
+
           switch (method) {
             case "CASH":
               const cashAccount = await tx.account.findFirst({
@@ -312,7 +322,7 @@ async function handlePost(req, res) {
           }
 
           if (!cashBankAccountId) {
-            throw new Error(`No ${method === "CASH" ? "cash" : "bank"} account found`);
+            throw new Error(`No ${method === "CASH" ? "cash" : "bank"} account found for payment method: ${method}`);
           }
 
           entries.push(
@@ -375,7 +385,7 @@ async function handlePost(req, res) {
 
   } catch (error) {
     console.error("Purchase creation error:", error);
-    
+
     if (error.code === 'P2003') {
       return res.status(400).json({
         success: false,
@@ -397,6 +407,7 @@ async function handlePost(req, res) {
   }
 }
 
+// Updated validation function to include new item fields
 function validatePurchaseData({ supplierId, items, payments }) {
   const errors = {};
 
@@ -419,8 +430,25 @@ function validatePurchaseData({ supplierId, items, payments }) {
       if (item.rate === undefined || item.rate === null || isNaN(parseFloat(item.rate)) || parseFloat(item.rate) < 0) {
         errors[`items[${index}].rate`] = 'Rate must be a non-negative number.';
       }
-      if (item.weightDeduction !== undefined && item.weightDeduction !== null && (isNaN(parseFloat(item.weightDeduction)) || parseFloat(item.weightDeduction) < 0)) {
-        errors[`items[${index}].weightDeduction`] = 'Weight deduction must be a non-negative number.';
+      // New validation for numberOfBunches
+      if (item.numberOfBunches !== undefined && item.numberOfBunches !== null && (isNaN(parseInt(item.numberOfBunches)) || parseInt(item.numberOfBunches) < 0)) {
+        errors[`items[${index}].numberOfBunches`] = 'Number of bunches must be a non-negative integer.';
+      }
+      // New validation for weightDeductionPerUnit
+      if (item.weightDeductionPerUnit !== undefined && item.weightDeductionPerUnit !== null && (isNaN(parseFloat(item.weightDeductionPerUnit)) || parseFloat(item.weightDeductionPerUnit) < 0)) {
+        errors[`items[${index}].weightDeductionPerUnit`] = 'Weight deduction per unit must be a non-negative number.';
+      }
+
+      // No explicit validation needed for totalWeightDeduction and effectiveQuantity
+      // as they are derived from other inputs. However, we can add a check for effectiveQuantity if desired.
+      const quantity = parseFloat(item.quantity);
+      const numberOfBunches = parseInt(item.numberOfBunches || 0);
+      const weightDeductionPerUnit = parseFloat(item.weightDeductionPerUnit || 0);
+      const totalWeightDeductionCalculated = numberOfBunches * weightDeductionPerUnit;
+      const effectiveQuantityCalculated = quantity - totalWeightDeductionCalculated;
+
+      if (effectiveQuantityCalculated < 0) {
+        errors[`items[${index}].effectiveQuantity`] = 'Effective quantity cannot be negative after weight deduction.';
       }
     });
   }
@@ -444,6 +472,7 @@ function validatePurchaseData({ supplierId, items, payments }) {
   };
 }
 
+// No changes needed for getPurchaseStats() as it aggregates existing fields.
 export async function getPurchaseStats() {
   try {
     const totalPurchasesResult = await prisma.purchase.aggregate({
