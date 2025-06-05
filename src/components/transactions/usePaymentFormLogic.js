@@ -5,7 +5,8 @@ import { useState, useEffect, useCallback } from "react";
 export const usePaymentFormLogic = (
   initialSupplierId,
   initialPurchaseId,
-  setGlobalError
+  setGlobalError,
+  paymentId = null // Added paymentId parameter
 ) => {
   const [debitAccounts, setDebitAccounts] = useState([]);
   const [purchases, setPurchases] = useState([]);
@@ -23,6 +24,7 @@ export const usePaymentFormLogic = (
   const [selectedPurchaseBalance, setSelectedPurchaseBalance] = useState(0);
   const [accountsLoading, setAccountsLoading] = useState(true);
   const [purchasesLoading, setPurchasesLoading] = useState(false);
+  const [isInitialDataLoaded, setIsInitialDataLoaded] = useState(false); // New state to track initial data load for edits
 
   // Helper to find supplier linked to an account
   const getSupplierIdFromAccount = useCallback(
@@ -61,47 +63,98 @@ export const usePaymentFormLogic = (
     [setGlobalError]
   );
 
+  // Effect to load existing payment data if paymentId is provided (for edit mode)
+  useEffect(() => {
+    const loadExistingPayment = async () => {
+      if (paymentId && !isInitialDataLoaded) {
+        setAccountsLoading(true); // Set loading to true while fetching existing payment
+        try {
+          const response = await fetch(`/api/payments/${paymentId}`);
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || "Failed to fetch existing payment");
+          }
+          const { data: paymentData } = await response.json();
+
+          // Set formData with fetched data
+          setFormData((prev) => ({
+            ...prev,
+            purchaseId: paymentData.purchaseId || null,
+            paymentMethod: paymentData.paymentMethod,
+            amount: paymentData.amount,
+            reference: paymentData.reference || "",
+            notes: paymentData.notes || "",
+            date: paymentData.date ? new Date(paymentData.date).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
+            // Find the debit account ID from transaction entries
+            debitAccountId: paymentData.transaction?.entries.find(entry => entry.debitAmount > 0)?.accountId || "",
+          }));
+
+          // Fetch balance for the pre-selected account
+          if (paymentData.transaction?.entries.find(entry => entry.debitAmount > 0)?.accountId) {
+            fetchAndSetDebitAccountBalance(paymentData.transaction.entries.find(entry => entry.debitAmount > 0).accountId);
+          }
+
+          setIsInitialDataLoaded(true); // Mark initial data as loaded
+        } catch (error) {
+          console.error("Error loading existing payment:", error);
+          setGlobalError(`Error loading existing payment: ${error.message}`);
+        } finally {
+          setAccountsLoading(false); // Set loading back to false
+        }
+      }
+    };
+
+    loadExistingPayment();
+  }, [paymentId, setGlobalError, fetchAndSetDebitAccountBalance, isInitialDataLoaded]);
+
+
   // Fetch initial data: Debit Accounts
   useEffect(() => {
     async function fetchInitialAccounts() {
-      setAccountsLoading(true);
-      try {
-        const accountsResponse = await fetch(
-          "/api/accounts?canBeDebitedForPayments=true&limit=500"
-        );
-        if (!accountsResponse.ok) {
-          const errorData = await accountsResponse.json();
-          throw new Error(errorData.message || "Failed to fetch accounts");
-        }
-        const accountsData = await accountsResponse.json();
-        setDebitAccounts(accountsData.data || []);
-
-        if (
-          initialSupplierId &&
-          accountsData.data &&
-          accountsData.data.length > 0
-        ) {
-          const supplierAccount = accountsData.data.find(
-            (acc) => acc.supplier?.id === parseInt(initialSupplierId)
+      // Only fetch if not in edit mode or if initial data hasn't been loaded yet for edit
+      if (!paymentId || !isInitialDataLoaded) {
+        setAccountsLoading(true);
+        try {
+          const accountsResponse = await fetch(
+            "/api/accounts?canBeDebitedForPayments=true&limit=500"
           );
-          if (supplierAccount) {
-            setFormData((prev) => ({
-              ...prev,
-              debitAccountId: supplierAccount.id,
-            }));
-            fetchAndSetDebitAccountBalance(supplierAccount.id);
+          if (!accountsResponse.ok) {
+            const errorData = await accountsResponse.json();
+            throw new Error(errorData.message || "Failed to fetch accounts");
           }
+          const accountsData = await accountsResponse.json();
+          setDebitAccounts(accountsData.data || []);
+
+          // This block is primarily for initial payment creation from supplier context
+          if (
+            initialSupplierId &&
+            !paymentId && // Only apply if not editing
+            accountsData.data &&
+            accountsData.data.length > 0
+          ) {
+            const supplierAccount = accountsData.data.find(
+              (acc) => acc.supplier?.id === parseInt(initialSupplierId)
+            );
+            if (supplierAccount) {
+              setFormData((prev) => ({
+                ...prev,
+                debitAccountId: supplierAccount.id,
+              }));
+              fetchAndSetDebitAccountBalance(supplierAccount.id);
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching initial accounts:", error);
+          setGlobalError(`Error fetching accounts: ${error.message}`);
+        } finally {
+          setAccountsLoading(false);
         }
-      } catch (error) {
-        console.error("Error fetching initial accounts:", error);
-        setGlobalError(`Error fetching accounts: ${error.message}`);
-      } finally {
-        setAccountsLoading(false);
       }
     }
 
     fetchInitialAccounts();
-  }, [initialSupplierId, fetchAndSetDebitAccountBalance, setGlobalError]);
+  }, [initialSupplierId, paymentId, isInitialDataLoaded, fetchAndSetDebitAccountBalance, setGlobalError]);
+
 
   // Fetch purchases when the selected debit account (and thus supplier) changes
   useEffect(() => {
@@ -122,12 +175,11 @@ export const usePaymentFormLogic = (
           }
           const data = await response.json();
 
-          // FIX: Use data.data instead of data
-          setPurchases(data.data || []); // <-- This was the issue!
+          setPurchases(data.data || []);
 
-          if (initialPurchaseId && data.data && data.data.length > 0) {
+          // This block is primarily for initial payment creation from purchase context
+          if (initialPurchaseId && data.data && data.data.length > 0 && !paymentId) {
             const purchase = data.data.find(
-              // <-- And here too
               (p) => p.id === parseInt(initialPurchaseId)
             );
             if (purchase) {
@@ -136,7 +188,14 @@ export const usePaymentFormLogic = (
               );
               setFormData((prev) => ({ ...prev, purchaseId: purchase.id }));
             }
+          } else if (formData.purchaseId) { // If a purchase is already selected (e.g., from edit mode), update its balance
+              const currentPurchase = data.data.find(p => p.id === formData.purchaseId);
+              setSelectedPurchaseBalance(
+                  currentPurchase ? currentPurchase.totalAmount - currentPurchase.paidAmount : 0
+              );
           }
+
+
         } catch (error) {
           console.error("Error fetching purchases:", error);
           setGlobalError(`Error fetching purchases: ${error.message}`);
@@ -154,6 +213,8 @@ export const usePaymentFormLogic = (
   }, [
     formData.debitAccountId,
     initialPurchaseId,
+    paymentId, // Added paymentId dependency
+    formData.purchaseId, // Added to re-evaluate if purchaseId changes
     getSupplierIdFromAccount,
     setGlobalError,
   ]);
@@ -205,5 +266,6 @@ export const usePaymentFormLogic = (
     handleDebitAccountChange,
     handlePurchaseChange,
     handleChange,
+    isInitialDataLoaded // Expose this to the component
   };
 };

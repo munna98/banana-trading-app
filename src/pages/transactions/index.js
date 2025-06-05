@@ -1,41 +1,100 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { prisma } from '../../lib/db';
+import { useRouter } from 'next/router';
 
-export default function TransactionsList({ initialTransactions = [] }) {
-  const [transactions, setTransactions] = useState(initialTransactions);
+export default function TransactionsList() {
+  const [transactions, setTransactions] = useState([]);
   const [filterType, setFilterType] = useState('all');
   const [filterEntity, setFilterEntity] = useState('');
   const [filterPaymentMethod, setFilterPaymentMethod] = useState('all');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const router = useRouter();
 
-  // Filter transactions based on search criteria
+  // Function to fetch data from APIs and normalize it
+  const fetchTransactions = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const queryParams = new URLSearchParams();
+      if (filterPaymentMethod !== 'all') {
+        queryParams.append('paymentMethod', filterPaymentMethod);
+      }
+      if (filterDateFrom) {
+        queryParams.append('startDate', filterDateFrom);
+      }
+      if (filterDateTo) {
+        queryParams.append('endDate', filterDateTo);
+      }
+      // You might need to add entity filtering at the API level for more efficiency
+      // or handle it client-side if API doesn't support generic entity name filter.
+      // For now, entityName filtering will be client-side on the combined data.
+
+      const paymentsResponse = await fetch(`/api/payments?${queryParams.toString()}`);
+      const receiptsResponse = await fetch(`/api/receipts?${queryParams.toString()}`);
+
+      if (!paymentsResponse.ok) throw new Error(`Failed to fetch payments: ${paymentsResponse.statusText}`);
+      if (!receiptsResponse.ok) throw new Error(`Failed to fetch receipts: ${receiptsResponse.statusText}`);
+
+      const paymentsData = await paymentsResponse.json();
+      const receiptsData = await receiptsResponse.json();
+
+      const combinedTransactions = [
+        ...paymentsData.data.map(p => ({
+          id: p.id,
+          type: 'payment',
+          date: p.date,
+          entityName: p.supplier?.name || 'N/A',
+          entityId: p.supplierId,
+          paymentMethod: p.paymentMethod,
+          amount: p.amount,
+          reference: p.reference,
+          notes: p.notes,
+          createdAt: p.createdAt,
+          updatedAt: p.updatedAt,
+        })),
+        ...receiptsData.data.map(r => ({
+          id: r.id,
+          type: 'receipt',
+          date: r.date,
+          entityName: r.customer?.name || 'N/A',
+          entityId: r.customerId,
+          paymentMethod: r.paymentMethod,
+          amount: r.amount,
+          reference: r.reference,
+          notes: r.notes,
+          createdAt: r.createdAt,
+          updatedAt: r.updatedAt,
+        })),
+      ];
+
+      // Sort by date descending
+      combinedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      setTransactions(combinedTransactions);
+    } catch (err) {
+      console.error("Error fetching transactions:", err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [filterPaymentMethod, filterDateFrom, filterDateTo]); // Dependencies for useCallback
+
+  // Fetch data on component mount and when filters change
+  useEffect(() => {
+    fetchTransactions();
+  }, [fetchTransactions]);
+
+  // Filter transactions based on client-side search criteria (entity name, type)
   const filteredTransactions = transactions.filter(transaction => {
     const matchesType = filterType === 'all' || transaction.type === filterType;
 
     const matchesEntity = filterEntity === '' ||
       (transaction.entityName && transaction.entityName.toLowerCase().includes(filterEntity.toLowerCase()));
 
-    const matchesPaymentMethod = filterPaymentMethod === 'all' ||
-      transaction.paymentMethod === filterPaymentMethod;
-
-    let matchesDateRange = true;
-    const transactionDate = new Date(transaction.date);
-
-    if (filterDateFrom) {
-      const fromDate = new Date(filterDateFrom);
-      fromDate.setHours(0, 0, 0, 0);
-      matchesDateRange = matchesDateRange && transactionDate >= fromDate;
-    }
-
-    if (filterDateTo) {
-      const toDate = new Date(filterDateTo);
-      toDate.setHours(23, 59, 59, 999);
-      matchesDateRange = matchesDateRange && transactionDate <= toDate;
-    }
-
-    return matchesType && matchesEntity && matchesPaymentMethod && matchesDateRange;
+    return matchesType && matchesEntity;
   });
 
   // Calculate totals
@@ -103,6 +162,39 @@ export default function TransactionsList({ initialTransactions = [] }) {
     }
   };
 
+  const handleDelete = async (id, type) => {
+    if (!confirm(`Are you sure you want to delete this ${type}?`)) {
+      return;
+    }
+    try {
+      const endpoint = type === 'payment' ? `/api/payments/${id}` : `/api/receipts/${id}`;
+      const response = await fetch(endpoint, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        alert(`${type.charAt(0).toUpperCase() + type.slice(1)} deleted successfully!`);
+        fetchTransactions(); // Re-fetch all transactions after deletion
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to delete ${type}: ${errorData.message || response.statusText}`);
+      }
+    } catch (err) {
+      console.error(`Error deleting ${type}:`, err);
+      alert(`An error occurred while deleting the ${type}.`);
+    }
+  };
+
+  const handleEdit = (id, type) => {
+    // Navigate to the edit page for the specific payment or receipt
+    if (type === 'payment') {
+      router.push(`/transactions/payments/edit/${id}`);
+    } else if (type === 'receipt') {
+      router.push(`/transactions/receipts/edit/${id}`);
+    }
+  };
+
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-pink-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -115,7 +207,7 @@ export default function TransactionsList({ initialTransactions = [] }) {
             </div>
             <div className="flex flex-wrap gap-3">
               <Link
-                href="/transactions/payments"
+                href="/transactions/payments/new"
                 className="inline-flex items-center justify-center px-6 py-3 bg-blue-500 text-white font-semibold rounded-xl hover:bg-blue-600 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
               >
                 <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -124,7 +216,7 @@ export default function TransactionsList({ initialTransactions = [] }) {
                 Make Payment
               </Link>
               <Link
-                href="/transactions/receipts"
+                href="/transactions/receipts/new"
                 className="inline-flex items-center justify-center px-6 py-3 bg-green-500 text-white font-semibold rounded-xl hover:bg-green-600 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
               >
                 <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -239,6 +331,8 @@ export default function TransactionsList({ initialTransactions = [] }) {
                   setFilterDateTo('');
                   setFilterType('all');
                   setFilterPaymentMethod('all');
+                  // Re-fetch data to clear API-level filters
+                  fetchTransactions();
                 }}
                 className="text-sm text-pink-600 hover:text-pink-700 font-medium"
               >
@@ -319,7 +413,16 @@ export default function TransactionsList({ initialTransactions = [] }) {
 
         {/* Transactions Table */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-          {filteredTransactions.length > 0 ? (
+          {loading ? (
+            <div className="text-center py-12">
+              <p className="text-lg text-slate-600">Loading transactions...</p>
+            </div>
+          ) : error ? (
+            <div className="text-center py-12 text-red-600">
+              <p className="text-lg">Error: {error}</p>
+              <p className="text-sm text-slate-500">Please try again later.</p>
+            </div>
+          ) : filteredTransactions.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-slate-200">
                 <thead className="bg-gradient-to-r from-slate-50 to-slate-100">
@@ -385,7 +488,26 @@ export default function TransactionsList({ initialTransactions = [] }) {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-center">
                         <div className="flex items-center justify-center space-x-2">
-                          {transaction.entityId && (
+                          <button
+                            onClick={() => handleEdit(transaction.id, transaction.type)}
+                            className="inline-flex items-center px-3 py-1.5 bg-yellow-100 text-yellow-700 text-sm font-medium rounded-lg hover:bg-yellow-200 transition-colors duration-150"
+                          >
+                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                            </svg>
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(transaction.id, transaction.type)}
+                            className="inline-flex items-center px-3 py-1.5 bg-red-100 text-red-700 text-sm font-medium rounded-lg hover:bg-red-200 transition-colors duration-150"
+                          >
+                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            Delete
+                          </button>
+                          {/* Existing View Supplier/Customer link, keep if still needed */}
+                          {/* {transaction.entityId && (
                             transaction.type === 'payment' ? (
                               <Link
                                 href={`/suppliers/${transaction.entityId}`}
@@ -409,7 +531,7 @@ export default function TransactionsList({ initialTransactions = [] }) {
                                 View Customer
                               </Link>
                             )
-                          )}
+                          )} */}
                         </div>
                       </td>
                     </tr>
@@ -432,33 +554,4 @@ export default function TransactionsList({ initialTransactions = [] }) {
   );
 }
 
-export async function getServerSideProps() {
-  try {
-    const initialTransactions = await prisma.transaction.findMany({
-      orderBy: {
-        date: 'desc',
-      },
-    });
-
-    // Manually serialize dates to ISO strings
-    const transactions = initialTransactions.map(transaction => ({
-      ...transaction,
-      date: transaction.date.toISOString(),
-      // Ensure amount is a number if it's coming as Decimal from Prisma
-      amount: transaction.amount.toNumber(),
-    }));
-
-    return {
-      props: {
-        initialTransactions: transactions,
-      },
-    };
-  } catch (error) {
-    console.error("Error fetching transactions:", error);
-    return {
-      props: {
-        initialTransactions: [],
-      },
-    };
-  }
-}
+// No getServerSideProps is needed here anymore.
