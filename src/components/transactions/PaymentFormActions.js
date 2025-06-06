@@ -1,4 +1,11 @@
-export default function PaymentFormActions({ loading, formData, selectedDebitAccountDetails, router }) {
+// components/transactions/PaymentFormActions.js
+export default function PaymentFormActions({
+  loading,
+  formData,
+  selectedDebitAccountDetails,
+  router, // Ensure router is passed down
+  isEditing = false, // <--- Accept isEditing prop with a default of false
+}) {
   return (
     <div className="flex flex-col sm:flex-row gap-3 pt-4">
       <button
@@ -14,7 +21,8 @@ export default function PaymentFormActions({ loading, formData, selectedDebitAcc
           loading ||
           !formData.debitAccountId ||
           parseFloat(formData.amount) <= 0 ||
-          (selectedDebitAccountDetails?.type === 'ASSET' && parseFloat(formData.amount) > selectedDebitAccountDetails.availableForPayment)
+          (selectedDebitAccountDetails?.type === "ASSET" &&
+            parseFloat(formData.amount) > selectedDebitAccountDetails.availableForPayment) // Note: This specific `availableForPayment` check might need re-evaluation for edit mode if it's based on current balance, as discussed in the previous response.
         }
         className="flex-1 px-8 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-semibold rounded-xl hover:from-blue-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 focus:ring-2 focus:ring-blue-500"
       >
@@ -57,7 +65,7 @@ export default function PaymentFormActions({ loading, formData, selectedDebitAcc
                 d="M5 13l4 4L19 7"
               />
             </svg>
-            Record Payment
+            {isEditing ? "Update Payment" : "Record Payment"}{" "}
           </>
         )}
       </button>

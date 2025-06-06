@@ -1,9 +1,15 @@
-export default function ReceiptFormActions({ loading, formData, selectedCreditAccountDetails, router }) {
+export default function ReceiptFormActions({
+  loading,
+  formData,
+  selectedCreditAccountDetails, // Changed from selectedDebitAccountDetails
+  router,
+  isEditing = false, // <--- Accept isEditing prop with a default of false
+}) {
   return (
     <div className="flex flex-col sm:flex-row gap-3 pt-4">
       <button
         type="button"
-        onClick={() => router.back()} // assuming you pass router as a prop or import useRouter here
+        onClick={() => router.back()} // Assuming router is passed down or useRouter is imported
         className="flex-1 sm:flex-none px-6 py-3 bg-slate-100 text-slate-700 font-semibold rounded-xl hover:bg-slate-200 transition-all duration-200 focus:ring-2 focus:ring-slate-500"
       >
         Cancel
@@ -12,9 +18,14 @@ export default function ReceiptFormActions({ loading, formData, selectedCreditAc
         type="submit"
         disabled={
           loading ||
-          !formData.creditAccountId ||
+          !formData.creditAccountId || // Changed from debitAccountId
           parseFloat(formData.amount) <= 0 ||
-          (selectedCreditAccountDetails?.type === 'LIABILITY' && parseFloat(formData.amount) > selectedCreditAccountDetails.availableForReceipt)
+          // You might need a similar balance check for credit accounts here
+          // For receipts, you typically receive money, so a balance check
+          // might be less common unless it's related to a credit limit or similar.
+          // Example (adjust as per your business logic for receipts):
+          // (selectedCreditAccountDetails?.type === 'LIABILITY' && parseFloat(formData.amount) > selectedCreditAccountDetails.someCreditLimitField)
+          false // Placeholder, add your receipt-specific validation if needed
         }
         className="flex-1 px-8 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white font-semibold rounded-xl hover:from-green-600 hover:to-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 focus:ring-2 focus:ring-green-500"
       >
@@ -54,10 +65,10 @@ export default function ReceiptFormActions({ loading, formData, selectedCreditAc
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth={2}
-                d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"
+                d="M5 13l4 4L19 7"
               />
             </svg>
-            Record Receipt
+            {isEditing ? "Update Receipt" : "Record Receipt"}{" "}
           </>
         )}
       </button>

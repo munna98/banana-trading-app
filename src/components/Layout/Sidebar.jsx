@@ -84,7 +84,7 @@ const menuItemsConfig = [
     icon: Briefcase,
     description: 'Accounting & Payments',
     subItems: [
-      { key: 'transactions', path: '/financials/transactions', label: 'All Transactions', icon: CreditCard },
+      { key: 'transactions', path: '/transactions', label: 'All Transactions', icon: CreditCard },
       { key: 'Payment', path: '/transactions/payments', label: 'Payment Out', icon: Upload },
       { key: 'Receipt', path: '/transactions/receipts', label: 'Receipt In', icon: Download },
       { key: 'accounts', path: '/accounts', label: 'Chart of Accounts', icon: BookOpenText },

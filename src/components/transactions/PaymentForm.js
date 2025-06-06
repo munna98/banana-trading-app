@@ -1,4 +1,9 @@
-import { paymentMethods, getReferencePlaceholder, isReferenceRequired } from "../../lib/payments";
+// components/transactions/PaymentForm.js
+import {
+  paymentMethods,
+  getReferencePlaceholder,
+  isReferenceRequired,
+} from "../../lib/payments";
 import PaymentAccountSelection from "./PaymentAccountSelection";
 import PurchaseSelection from "./PurchaseSelection";
 import PaymentMethodSelection from "./PaymentMethodSelection";
@@ -9,7 +14,7 @@ import NotesInput from "./NotesInput";
 import PaymentFormActions from "./PaymentFormActions";
 
 export default function PaymentForm({
-  formData, 
+  formData,
   setFormData,
   debitAccounts,
   purchases,
@@ -23,11 +28,10 @@ export default function PaymentForm({
   handleChange,
   handleSubmit,
   loading,
+  router, // Make sure router is passed down if PaymentFormActions needs it.
+  isEditing = false, // <--- Accept isEditing prop with a default of false
 }) {
   const displaySupplierId = getSupplierIdFromAccount(formData.debitAccountId);
-console.log(formData.debitAccountId,"id");
-console.log(displaySupplierId,"id");
-console.log(purchases,"purchases");
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
@@ -78,6 +82,8 @@ console.log(purchases,"purchases");
           loading={loading}
           formData={formData}
           selectedDebitAccountDetails={selectedDebitAccountDetails}
+          router={router}
+          isEditing={isEditing} 
         />
       </form>
     </div>

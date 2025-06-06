@@ -1,18 +1,68 @@
-import { useState, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
 import { usePaymentFormLogic } from "../../components/transactions/usePaymentFormLogic";
-import { paymentMethods } from "../../lib/payments"; // Keep this for passing to PaymentSummaryCard
+import { paymentMethods } from "../../lib/payments";
 
 import PaymentForm from "../../components/transactions/PaymentForm";
 import PaymentSidebar from "../../components/transactions/PaymentSidebar";
 
+// Custom hook for toast notifications
+const useToast = () => {
+  const showToast = useCallback((message, type = 'success') => {
+    const toast = document.createElement("div");
+    toast.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 ${
+      type === 'success' ? 'bg-green-500' : 'bg-red-500'
+    } text-white`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    
+    const timer = setTimeout(() => {
+      if (document.body.contains(toast)) {
+        document.body.removeChild(toast);
+      }
+    }, type === 'success' ? 2000 : 5000);
+    
+    return () => clearTimeout(timer);
+  }, []);
+
+  return { showToast };
+};
+
+// Custom hook for form validation
+const usePaymentValidation = () => {
+  const validatePayment = useCallback((formData, selectedDebitAccountDetails) => {
+    // Validate account selection
+    if (!formData.debitAccountId) {
+      throw new Error("Please select an account.");
+    }
+
+    // Validate amount
+    const amount = parseFloat(formData.amount);
+    if (isNaN(amount) || amount <= 0) {
+      throw new Error("Please enter a valid payment amount greater than zero.");
+    }
+
+    // Validate sufficient funds for asset accounts
+    if (selectedDebitAccountDetails?.type === 'ASSET' && 
+        amount > selectedDebitAccountDetails.availableForPayment) {
+      throw new Error("Insufficient funds in the selected account.");
+    }
+
+    return amount;
+  }, []);
+
+  return { validatePayment };
+};
+
 export default function MakePayment() {
   const router = useRouter();
   const { supplierId: initialSupplierId, purchaseId: initialPurchaseId } = router.query;
+  const { showToast } = useToast();
+  const { validatePayment } = usePaymentValidation();
 
   const [loading, setLoading] = useState(false);
-  const [globalError, setGlobalError] = useState(null); // For errors not tied to specific fields
+  const [globalError, setGlobalError] = useState(null);
 
   const {
     formData,
@@ -27,54 +77,26 @@ export default function MakePayment() {
     handleDebitAccountChange,
     handlePurchaseChange,
     handleChange,
+    initializationComplete,
   } = usePaymentFormLogic(initialSupplierId, initialPurchaseId, setGlobalError);
 
-  // Display global errors
-  useEffect(() => {
-    if (globalError) {
-      const errorDiv = document.createElement("div");
-      errorDiv.className =
-        "fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50";
-      errorDiv.textContent = globalError;
-      document.body.appendChild(errorDiv);
-      const timer = setTimeout(() => {
-        document.body.removeChild(errorDiv);
-        setGlobalError(null); // Clear the error after display
-      }, 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [globalError]);
+  // Show global errors as toast
+  if (globalError) {
+    showToast(globalError, 'error');
+    setGlobalError(null);
+  }
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
     setLoading(true);
-    setGlobalError(null); // Clear previous errors
-
-    // Client-side validation
-    if (!formData.debitAccountId) {
-      setGlobalError("Please select an account.");
-      setLoading(false);
-      return;
-    }
-    const amount = parseFloat(formData.amount);
-    if (isNaN(amount) || amount <= 0) {
-      setGlobalError("Please enter a valid payment amount greater than zero.");
-      setLoading(false);
-      return;
-    }
-
-    // Payment restriction logic (moved from original handleSubmit to maintain existing logic)
-    if (selectedDebitAccountDetails) {
-      if (selectedDebitAccountDetails.type === 'ASSET' && amount > selectedDebitAccountDetails.availableForPayment) {
-        setGlobalError("Insufficient funds in the selected account.");
-        setLoading(false);
-        return;
-      }
-    }
-
-    const currentSupplierId = getSupplierIdFromAccount(formData.debitAccountId);
+    setGlobalError(null);
 
     try {
+      // Validate form data
+      const amount = validatePayment(formData, selectedDebitAccountDetails);
+      const currentSupplierId = getSupplierIdFromAccount(formData.debitAccountId);
+
+      // Submit payment
       const response = await fetch("/api/payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -82,37 +104,34 @@ export default function MakePayment() {
           ...formData,
           supplierId: currentSupplierId,
           purchaseId: formData.purchaseId,
-          amount: amount, // Use parsed amount
+          amount: amount,
           debitAccountId: parseInt(formData.debitAccountId),
         }),
       });
 
-      if (response.ok) {
-        const successDiv = document.createElement("div");
-        successDiv.className =
-          "fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50";
-        successDiv.textContent = "Payment recorded successfully!";
-        document.body.appendChild(successDiv);
-
-        setTimeout(() => {
-          document.body.removeChild(successDiv);
-          if (currentSupplierId) {
-            router.push(`/suppliers/${currentSupplierId}`);
-          } else {
-            router.push(`/transactions/`);
-          }
-        }, 2000);
-      } else {
+      if (!response.ok) {
         const error = await response.json();
         throw new Error(error.message || "Failed to record payment");
       }
+
+      // Show success message and redirect
+      showToast("Payment recorded successfully!");
+      
+      setTimeout(() => {
+        if (currentSupplierId) {
+          router.push(`/suppliers/${currentSupplierId}`);
+        } else {
+          router.push(`/transactions/`);
+        }
+      }, 2000);
+
     } catch (error) {
       console.error("Error recording payment:", error);
       setGlobalError("Error recording payment: " + error.message);
     } finally {
       setLoading(false);
     }
-  };
+  }, [formData, selectedDebitAccountDetails, getSupplierIdFromAccount, validatePayment, showToast, router]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-pink-50">
@@ -149,36 +168,48 @@ export default function MakePayment() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Form */}
-          <div className="lg:col-span-2">
-            <PaymentForm
-              formData={formData}
-              setFormData={setFormData}
-              debitAccounts={debitAccounts}
-              purchases={purchases}
+        {/* Show loading state during initialization */}
+        {!initializationComplete ? (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+            <div className="animate-pulse space-y-4">
+              <div className="h-4 bg-slate-200 rounded w-1/4"></div>
+              <div className="h-10 bg-slate-200 rounded"></div>
+              <div className="h-4 bg-slate-200 rounded w-1/4"></div>
+              <div className="h-10 bg-slate-200 rounded"></div>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Main Form */}
+            <div className="lg:col-span-2">
+              <PaymentForm
+                formData={formData}
+                setFormData={setFormData}
+                debitAccounts={debitAccounts}
+                purchases={purchases}
+                selectedDebitAccountDetails={selectedDebitAccountDetails}
+                selectedPurchaseBalance={selectedPurchaseBalance}
+                accountsLoading={accountsLoading}
+                purchasesLoading={purchasesLoading}
+                getSupplierIdFromAccount={getSupplierIdFromAccount}
+                handleDebitAccountChange={handleDebitAccountChange}
+                handlePurchaseChange={handlePurchaseChange}
+                handleChange={handleChange}
+                handleSubmit={handleSubmit}
+                loading={loading}
+                router={router}
+              />
+            </div>
+
+            {/* Sidebar - Payment Info */}
+            <PaymentSidebar
               selectedDebitAccountDetails={selectedDebitAccountDetails}
               selectedPurchaseBalance={selectedPurchaseBalance}
-              accountsLoading={accountsLoading}
-              purchasesLoading={purchasesLoading}
-              getSupplierIdFromAccount={getSupplierIdFromAccount}
-              handleDebitAccountChange={handleDebitAccountChange}
-              handlePurchaseChange={handlePurchaseChange}
-              handleChange={handleChange}
-              handleSubmit={handleSubmit}
-              loading={loading}
-              router={router} // Pass router for the Cancel button
+              formData={formData}
+              paymentMethods={paymentMethods}
             />
           </div>
-
-          {/* Sidebar - Payment Info */}
-          <PaymentSidebar
-            selectedDebitAccountDetails={selectedDebitAccountDetails}
-            selectedPurchaseBalance={selectedPurchaseBalance}
-            formData={formData}
-            paymentMethods={paymentMethods}
-          />
-        </div>
+        )}
       </div>
     </div>
   );

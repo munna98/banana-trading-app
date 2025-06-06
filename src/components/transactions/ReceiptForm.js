@@ -1,4 +1,9 @@
-import { paymentMethods, getReferencePlaceholder, isReferenceRequired } from "../../lib/payments"; // Assuming these are generalized or you'll create a receipt-specific lib
+// components/transactions/ReceiptForm.js
+import {
+  paymentMethods, // Assuming these are generalized or you'll create a receipt-specific lib
+  getReferencePlaceholder,
+  isReferenceRequired,
+} from "../../lib/payments";
 import ReceiptAccountSelection from "./ReceiptAccountSelection"; // Changed import
 import SaleSelection from "./SaleSelection"; // Changed import
 import PaymentMethodSelection from "./PaymentMethodSelection"; // Reused, as method selection is similar
@@ -23,6 +28,8 @@ export default function ReceiptForm({
   handleChange,
   handleSubmit,
   loading,
+  router, // <--- Add router prop here
+  isEditing = false, // <--- Accept isEditing prop with a default of false
 }) {
   const displayCustomerId = getCustomerIdFromAccount(formData.creditAccountId); // Changed from getSupplierIdFromAccount and debitAccountId
 
@@ -72,16 +79,18 @@ export default function ReceiptForm({
           setFormData={setFormData}
         />
 
-        <ReceiptDateInput formData={formData} handleChange={handleChange} /> {/* Changed component */}
-
-        <NotesInput formData={formData} handleChange={handleChange} /> {/* Reused component */}
-
+        <ReceiptDateInput formData={formData} handleChange={handleChange} />{" "}
+        {/* Changed component */}
+        <NotesInput formData={formData} handleChange={handleChange} />{" "}
+        {/* Reused component */}
         <ReceiptFormActions // Reused component, but check its internal logic if it relies heavily on "debit" context
           loading={loading}
           formData={formData}
           selectedCreditAccountDetails={selectedCreditAccountDetails} // Changed prop
+          router={router} // <--- Pass router here
+          isEditing={isEditing} // <--- Pass isEditing here
         />
       </form>
     </div>
-  );  
+  );
 }
