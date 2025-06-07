@@ -1,96 +1,158 @@
-// pages/transactions/receipts/edit/[id].js (Conceptual)
+// pages/transactions/receipts/edit/[id].js
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
-// ... other imports for receipt logic and components
+import Link from "next/link";
+import { useReceiptFormLogic } from "../../../../components/transactions/useReceiptFormLogic";
+import { paymentMethods } from "../../../../lib/payments";
 
 import ReceiptForm from "../../../../components/transactions/ReceiptForm";
-// import ReceiptSidebar from "../../../../components/transactions/ReceiptSidebar"; // If you have one
+import ReceiptSidebar from "../../../../components/transactions/ReceiptSidebar";
 
 export default function EditReceipt() {
   const router = useRouter();
   const { id } = router.query;
-  // ... other states and logic for fetching receipt data
+  const [initialDataLoaded, setInitialDataLoaded] = useState(false);
+  const [originalReceiptAmount, setOriginalReceiptAmount] = useState(0);
 
-  // Placeholder for your receipt data and form logic
-  const [formData, setFormData] = useState({
-    creditAccountId: "",
-    saleId: "",
-    amount: "",
-    // ... other receipt fields
-  });
   const [loading, setLoading] = useState(false);
-  const [selectedCreditAccountDetails, setSelectedCreditAccountDetails] =
-    useState(null);
-  const [selectedSaleBalance, setSelectedSaleBalance] = useState(0);
-  const [creditAccounts, setCreditAccounts] = useState([]);
-  const [sales, setSales] = useState([]);
-  const [accountsLoading, setAccountsLoading] = useState(false);
-  const [salesLoading, setSalesLoading] = useState(false);
+  const [globalError, setGlobalError] = useState(null);
 
-  // Example: Mock fetching initial data (replace with your actual API call)
+  const {
+    formData,
+    setFormData,
+    creditAccounts,
+    sales,
+    selectedCreditAccountDetails,
+    selectedSaleBalance,
+    accountsLoading,
+    salesLoading,
+    getCustomerIdFromAccount,
+    handleCreditAccountChange,
+    handleSaleChange,
+    handleChange,
+  } = useReceiptFormLogic(null, null, setGlobalError, id);
+
   useEffect(() => {
     const fetchReceiptData = async () => {
-      if (!id) return;
-      setLoading(true);
-      try {
-        // Simulate API call
-        const mockReceiptData = {
-          creditAccountId: "1",
-          saleId: "S001",
-          amount: 500.0,
-          paymentMethod: "Bank Transfer",
-          date: new Date().toISOString().split("T")[0],
-          // ... more fields
-        };
-        const mockAccountDetails = {
-          id: "1",
-          accountName: "Cash Account",
-          accountingBalance: 1500.0, // Current balance *after* the original receipt
-          type: "ASSET",
-        };
-        const mockSales = [{ id: "S001", label: "Sale 1", balance: 750 }];
-        const mockAccounts = [
-          { id: "1", label: "Cash Account", type: "ASSET" },
-        ];
+      if (!id || initialDataLoaded) return;
 
-        setFormData(mockReceiptData);
-        setSelectedCreditAccountDetails(mockAccountDetails);
-        setCreditAccounts(mockAccounts);
-        setSales(mockSales);
-        // You'll also need to store the original receipt amount for accurate balance calculations in the summary.
-        // For simplicity, I'm omitting that detailed balance logic here, but remember the payment summary pattern.
-      } catch (error) {
-        console.error("Error fetching receipt data:", error);
+      try {
+        setLoading(true);
+        const response = await fetch(`/api/receipts/${id}`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch receipt with ID ${id}`);
+        }
+        const { data: receiptData } = await response.json();
+
+        setOriginalReceiptAmount(receiptData.amount);
+
+        setFormData({
+          customerId: receiptData.customerId || "",
+          saleId: receiptData.saleId || "",
+          paymentMethod: receiptData.paymentMethod,
+          amount: receiptData.amount,
+          reference: receiptData.reference || "",
+          notes: receiptData.notes || "",
+          date: receiptData.date
+            ? new Date(receiptData.date).toISOString().split("T")[0]
+            : new Date().toISOString().split("T")[0],
+          creditAccountId:
+            receiptData.transaction?.entries.find(
+              (entry) => entry.creditAmount > 0
+            )?.accountId || "",
+        });
+        setInitialDataLoaded(true);
+      } catch (err) {
+        console.error("Error fetching receipt for edit:", err);
+        setGlobalError("Failed to load receipt details: " + err.message);
       } finally {
         setLoading(false);
       }
     };
-    fetchReceiptData();
-  }, [id]);
+
+    if (id) {
+      fetchReceiptData();
+    }
+  }, [id, setFormData, setGlobalError, initialDataLoaded]);
+
+  useEffect(() => {
+    if (globalError) {
+      const errorDiv = document.createElement("div");
+      errorDiv.className =
+        "fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50";
+      errorDiv.textContent = globalError;
+      document.body.appendChild(errorDiv);
+      const timer = setTimeout(() => {
+        document.body.removeChild(errorDiv);
+        setGlobalError(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [globalError]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    // ... your update receipt API call logic here
-    console.log("Updating receipt:", formData);
-    setLoading(false);
-    // router.push("/transactions"); // Redirect after success
+    setGlobalError(null);
+
+    if (!formData.creditAccountId) {
+      setGlobalError("Please select an account.");
+      setLoading(false);
+      return;
+    }
+    const amount = parseFloat(formData.amount);
+    if (isNaN(amount) || amount <= 0) {
+      setGlobalError("Please enter a valid receipt amount greater than zero.");
+      setLoading(false);
+      return;
+    }
+
+    // For receipts, we typically don't need to check balance constraints like payments
+    // since receipts increase account balances, but you can add validation if needed
+
+    const currentCustomerId = getCustomerIdFromAccount(formData.creditAccountId);
+
+    try {
+      const response = await fetch(`/api/receipts/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...formData,
+          customerId: currentCustomerId,
+          saleId: formData.saleId,
+          amount: amount,
+          creditAccountId: parseInt(formData.creditAccountId),
+        }),
+      });
+
+      if (response.ok) {
+        const successDiv = document.createElement("div");
+        successDiv.className =
+          "fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50";
+        successDiv.textContent = "Receipt updated successfully!";
+        document.body.appendChild(successDiv);
+
+        setTimeout(() => {
+          document.body.removeChild(successDiv);
+          if (currentCustomerId) {
+            router.push(`/customers/${currentCustomerId}`);
+          } else {
+            router.push(`/transactions/`);
+          }
+        }, 2000);
+      } else {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to update receipt");
+      }
+    } catch (error) {
+      console.error("Error updating receipt:", error);
+      setGlobalError("Error updating receipt: " + error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const getCustomerIdFromAccount = (accountId) => {
-    // Implement your logic to get customer ID from account
-    return "C001"; // Placeholder
-  };
-  const handleCreditAccountChange = (e) => {
-    handleChange(e);
-    // Update selectedCreditAccountDetails based on the new account ID
-  };
-  const handleSaleChange = (e) => {
-    handleChange(e);
-    // Update selectedSaleBalance based on the new sale ID
-  };
-
-  if (!router.isReady || loading) {
+  if (!router.isReady || (loading && !initialDataLoaded)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-pink-50">
         <p className="text-xl text-slate-700">Loading receipt details...</p>
@@ -126,7 +188,9 @@ export default function EditReceipt() {
                 <h1 className="text-3xl font-bold text-slate-900 mb-2">
                   Edit Receipt
                 </h1>
-                <p className="text-slate-600">Modify an existing receipt record</p>
+                <p className="text-slate-600">
+                  Modify an existing receipt record
+                </p>
               </div>
             </div>
           </div>
@@ -149,16 +213,15 @@ export default function EditReceipt() {
               handleChange={handleChange}
               handleSubmit={handleSubmit}
               loading={loading}
-              router={router} 
-              isEditing={true} 
+              router={router}
+              isEditing={true}
             />
           </div>
 
-
           <ReceiptSidebar
-            formData={formData}
             selectedCreditAccountDetails={selectedCreditAccountDetails}
             selectedSaleBalance={selectedSaleBalance}
+            formData={formData}
             paymentMethods={paymentMethods}
             originalReceiptAmount={originalReceiptAmount}
           />

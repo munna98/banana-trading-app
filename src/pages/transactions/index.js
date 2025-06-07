@@ -207,7 +207,7 @@ export default function TransactionsList() {
             </div>
             <div className="flex flex-wrap gap-3">
               <Link
-                href="/transactions/payments/new"
+                href="/transactions/payments/"
                 className="inline-flex items-center justify-center px-6 py-3 bg-blue-500 text-white font-semibold rounded-xl hover:bg-blue-600 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
               >
                 <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -216,7 +216,7 @@ export default function TransactionsList() {
                 Make Payment
               </Link>
               <Link
-                href="/transactions/receipts/new"
+                href="/transactions/receipts/"
                 className="inline-flex items-center justify-center px-6 py-3 bg-green-500 text-white font-semibold rounded-xl hover:bg-green-600 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
               >
                 <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
