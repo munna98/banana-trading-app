@@ -3,14 +3,14 @@ export default function PaymentFormActions({
   loading,
   formData,
   selectedDebitAccountDetails,
-  router, // Ensure router is passed down
-  isEditing = false, // <--- Accept isEditing prop with a default of false
+  router, 
+  isEditing = false, 
 }) {
   return (
     <div className="flex flex-col sm:flex-row gap-3 pt-4">
       <button
         type="button"
-        onClick={() => router.back()} // assuming you pass router as a prop or import useRouter here
+        onClick={() => router.back()} 
         className="flex-1 sm:flex-none px-6 py-3 bg-slate-100 text-slate-700 font-semibold rounded-xl hover:bg-slate-200 transition-all duration-200 focus:ring-2 focus:ring-slate-500"
       >
         Cancel
@@ -22,7 +22,7 @@ export default function PaymentFormActions({
           !formData.debitAccountId ||
           parseFloat(formData.amount) <= 0 ||
           (selectedDebitAccountDetails?.type === "ASSET" &&
-            parseFloat(formData.amount) > selectedDebitAccountDetails.availableForPayment) // Note: This specific `availableForPayment` check might need re-evaluation for edit mode if it's based on current balance, as discussed in the previous response.
+            parseFloat(formData.amount) > selectedDebitAccountDetails.availableForPayment) 
         }
         className="flex-1 px-8 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-semibold rounded-xl hover:from-blue-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 focus:ring-2 focus:ring-blue-500"
       >

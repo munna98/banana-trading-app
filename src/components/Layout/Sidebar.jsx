@@ -24,7 +24,7 @@ import {
   Download,
   Upload,
   BookText,
-  BookOpenText, // Example for an overview sub-item if needed
+  BookOpenText, 
 } from 'lucide-react';
 
 // Custom Banana SVG Icon Component (retained from your example)
@@ -103,7 +103,6 @@ const menuItemsConfig = [
     label: 'Reports',
     icon: FileText,
     description: 'Business intelligence',
-    // path: '/reports', // if /reports is the main page for this section
     subItems: [
       { key: 'reportsDashboard', path: '/reports', label: 'Reports Dashboard', icon: FileText },
       { key: 'balanceSheet', path: '/reports/balance-sheet', label: 'Balance Sheet', icon: FileText },

@@ -117,13 +117,11 @@ export default function AddPurchase() {
                 setErrors={setErrors}
                 calculateTotalAmount={calculateTotalAmount}
                 calculateTotalPaidAmount={calculateTotalPaidAmount}
-                // New props for collapsibility
                 isCollapsed={isPaymentSectionCollapsed}
                 onToggleCollapse={togglePaymentSection}
               />
             </div>
-
-            {/* Fixed Save Button - Responsive positioning */}
+            
             <div className="sticky bottom-0 bg-white border-t border-slate-200 p-4 sm:p-6">
               <div className="flex flex-col sm:flex-row gap-3 sm:justify-end sm:items-center">
                 <div className="text-sm text-slate-600 sm:mr-4 order-2 sm:order-1">

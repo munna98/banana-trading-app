@@ -59,7 +59,7 @@ export default function PurchaseHeader({
             </svg>
             Print Invoice
           </button>
-          {purchase.balance > 0 && (
+          {/* {purchase.balance > 0 && (
             <button
               onClick={onPayment}
               className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white font-semibold rounded-lg hover:from-green-600 hover:to-green-700 transition-all duration-200 shadow-lg hover:shadow-xl"
@@ -79,7 +79,7 @@ export default function PurchaseHeader({
               </svg>
               Add Payment
             </button>
-          )}
+          )} */}
           <Link
             href={`/purchases/edit/${purchase.id}`}
             className="inline-flex items-center px-4 py-2 bg-blue-100 text-blue-700 font-medium rounded-lg hover:bg-blue-200 transition-colors"

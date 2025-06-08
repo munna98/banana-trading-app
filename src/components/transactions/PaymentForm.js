@@ -28,8 +28,8 @@ export default function PaymentForm({
   handleChange,
   handleSubmit,
   loading,
-  router, // Make sure router is passed down if PaymentFormActions needs it.
-  isEditing = false, // <--- Accept isEditing prop with a default of false
+  router, 
+  isEditing = false, 
 }) {
   const displaySupplierId = getSupplierIdFromAccount(formData.debitAccountId);
 
