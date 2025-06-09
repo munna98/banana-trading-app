@@ -1,7 +1,6 @@
 // pages/api/purchases/index.js
 import { PrismaClient } from '@prisma/client';
-import { generateInvoiceNumber } from '../../../lib/invoiceGenerator'; // Assuming this path is correct
-
+import { generateInvoiceNumber } from '../../../lib/invoiceGenerator'; 
 const prisma = new PrismaClient();
 const isDevelopment = process.env.NODE_ENV === 'development';
 
@@ -164,9 +163,6 @@ async function handlePost(req, res) {
 
     // Use a transaction to ensure atomicity
     const newPurchase = await prisma.$transaction(async (tx) => {
-      // Get the items with their details to determine expense account (optional, still using fixed for now)
-      // No changes needed here for itemDetails or expenseAccount as per current logic.
-
       // Verify supplier exists
       const supplier = await tx.supplier.findUnique({
         where: { id: parseInt(supplierId) },
@@ -339,18 +335,94 @@ async function handlePost(req, res) {
         }
       }
 
-      // Create payment records if any payments were made
+      // Create payment records with proper transaction entries if any payments were made
       if (payments.length > 0) {
-        await tx.payment.createMany({
-          data: payments.map(payment => ({
-            supplierId: parseInt(supplierId),
-            purchaseId: purchase.id,
-            paymentMethod: payment.method,
-            amount: parseFloat(payment.amount),
-            reference: payment.reference || null,
-            date: new Date(),
-          }))
-        });
+        for (const paymentData of payments) {
+          // Create the payment record
+          const payment = await tx.payment.create({
+            data: {
+              supplierId: parseInt(supplierId),
+              purchaseId: purchase.id,
+              paymentMethod: paymentData.method,
+              amount: parseFloat(paymentData.amount),
+              reference: paymentData.reference || null,
+              date: new Date(),
+            }
+          });
+
+          // Create transaction record for this payment
+          const paymentTransaction = await tx.transaction.create({
+            data: {
+              type: "PAYMENT",
+              amount: parseFloat(paymentData.amount),
+              description: `Payment ${payment.id} - ${paymentData.method} to ${supplier.name} for Purchase #${purchase.id}`,
+              date: payment.date,
+              referenceNo: paymentData.reference || null,
+              notes: `Payment made during purchase creation`,
+              paymentId: payment.id,
+            },
+          });
+
+          // Determine the cash/bank account to be credited
+          let cashBankAccountId;
+          switch (paymentData.method) {
+            case "CASH":
+              const cashAccount = await tx.account.findFirst({
+                where: {
+                  code: "1111",
+                  type: "ASSET",
+                  isActive: true,
+                },
+              });
+              cashBankAccountId = cashAccount?.id;
+              break;
+            case "BANK_TRANSFER":
+            case "CHEQUE":
+            case "UPI":
+            case "CARD":
+              const bankAccount = await tx.account.findFirst({
+                where: {
+                  code: "1112",
+                  type: "ASSET",
+                  isActive: true,
+                },
+              });
+              cashBankAccountId = bankAccount?.id;
+              break;
+            default:
+              throw new Error(`Invalid payment method: ${paymentData.method}`);
+          }
+
+          if (!cashBankAccountId) {
+            throw new Error(
+              `No ${paymentData.method === "CASH" ? "cash" : "bank"} account found for payment method: ${paymentData.method}`
+            );
+          }
+
+          // Create transaction entries for this payment (double-entry bookkeeping)
+          
+          // 1. DEBIT the Trade Payable account (reducing liability)
+          await tx.transactionEntry.create({
+            data: {
+              transactionId: paymentTransaction.id,
+              accountId: tradePayableAccount.id,
+              debitAmount: parseFloat(paymentData.amount),
+              creditAmount: 0,
+              description: `Payment ${payment.id} - Trade Payable Reduction (Debit)`,
+            },
+          });
+
+          // 2. CREDIT the Cash/Bank account (reducing asset)
+          await tx.transactionEntry.create({
+            data: {
+              transactionId: paymentTransaction.id,
+              accountId: cashBankAccountId,
+              debitAmount: 0,
+              creditAmount: parseFloat(paymentData.amount),
+              description: `Payment ${payment.id} - ${paymentData.method} Payment (Credit)`,
+            },
+          });
+        }
       }
 
       // Return the created purchase with all related data

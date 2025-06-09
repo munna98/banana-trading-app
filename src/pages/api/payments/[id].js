@@ -102,7 +102,8 @@ async function handlePut(req, res, id) {
     amount,
     reference,
     notes,
-    date
+    date,
+    purchaseId // Make sure this is included
   } = req.body;
 
   try {
@@ -132,6 +133,11 @@ async function handlePut(req, res, id) {
       const oldAmount = existingPayment.amount;
       const newAmount = amount ? parseFloat(amount) : oldAmount;
       const amountDifference = newAmount - oldAmount;
+      
+      // Handle purchase changes
+      const oldPurchaseId = existingPayment.purchaseId;
+      const newPurchaseId = purchaseId ? parseInt(purchaseId) : null;
+      const purchaseChanged = oldPurchaseId !== newPurchaseId;
 
       // Update the payment
       const updatedPayment = await tx.payment.update({
@@ -142,17 +148,30 @@ async function handlePut(req, res, id) {
           reference: reference !== undefined ? reference : existingPayment.reference,
           notes: notes !== undefined ? notes : existingPayment.notes,
           date: date ? new Date(date) : existingPayment.date,
+          purchaseId: newPurchaseId, // Update the purchase link
           updatedAt: new Date()
         }
       });
 
       // Update transaction description and amount
       if (existingPayment.transaction) {
+        // Get supplier info for description
+        let supplierInfo = '';
+        if (existingPayment.supplier) {
+          supplierInfo = ` to ${existingPayment.supplier.name}`;
+        }
+        
+        // Get purchase info for description
+        let purchaseInfo = '';
+        if (newPurchaseId) {
+          purchaseInfo = ` for Purchase #${newPurchaseId}`;
+        }
+
         await tx.transaction.update({
           where: { id: existingPayment.transaction.id },
           data: {
             amount: newAmount,
-            description: `Payment ${id} - ${updatedPayment.paymentMethod}${existingPayment.supplier ? ` to ${existingPayment.supplier.name}` : ''}${existingPayment.purchase ? ` for Purchase #${existingPayment.purchase.id}` : ''}`,
+            description: `Payment ${id} - ${updatedPayment.paymentMethod}${supplierInfo}${purchaseInfo}`,
             date: updatedPayment.date,
             referenceNo: updatedPayment.reference,
             notes: updatedPayment.notes
@@ -181,14 +200,57 @@ async function handlePut(req, res, id) {
         }
       }
 
-      // Update purchase paid amount if linked and amount changed
-      if (existingPayment.purchase && amountDifference !== 0) {
+      // Handle purchase paid amount and balance updates
+      if (purchaseChanged) {
+        // Remove amount from old purchase if it existed
+        if (oldPurchaseId) {
+          const oldPurchase = await tx.purchase.findUnique({
+            where: { id: oldPurchaseId }
+          });
+          
+          const newPaidAmount = oldPurchase.paidAmount - oldAmount;
+          const newBalance = oldPurchase.totalAmount - newPaidAmount;
+          
+          await tx.purchase.update({
+            where: { id: oldPurchaseId },
+            data: {
+              paidAmount: newPaidAmount,
+              balance: newBalance
+            }
+          });
+        }
+
+        // Add amount to new purchase if it exists
+        if (newPurchaseId) {
+          const newPurchase = await tx.purchase.findUnique({
+            where: { id: newPurchaseId }
+          });
+          
+          const updatedPaidAmount = newPurchase.paidAmount + newAmount;
+          const updatedBalance = newPurchase.totalAmount - updatedPaidAmount;
+          
+          await tx.purchase.update({
+            where: { id: newPurchaseId },
+            data: {
+              paidAmount: updatedPaidAmount,
+              balance: updatedBalance
+            }
+          });
+        }
+      } else if (existingPayment.purchase && amountDifference !== 0) {
+        // Only amount changed, same purchase
+        const currentPurchase = await tx.purchase.findUnique({
+          where: { id: existingPayment.purchase.id }
+        });
+        
+        const updatedPaidAmount = currentPurchase.paidAmount + amountDifference;
+        const updatedBalance = currentPurchase.totalAmount - updatedPaidAmount;
+        
         await tx.purchase.update({
           where: { id: existingPayment.purchase.id },
           data: {
-            paidAmount: {
-              increment: amountDifference
-            }
+            paidAmount: updatedPaidAmount,
+            balance: updatedBalance
           }
         });
       }
@@ -262,14 +324,20 @@ async function handleDelete(req, res, id) {
 
     // Start transaction for deletion
     await prisma.$transaction(async (tx) => {
-      // Update purchase paid amount if linked
+      // Update purchase paid amount and balance if linked
       if (existingPayment.purchase) {
+        const purchase = await tx.purchase.findUnique({
+          where: { id: existingPayment.purchase.id }
+        });
+        
+        const updatedPaidAmount = purchase.paidAmount - existingPayment.amount;
+        const updatedBalance = purchase.totalAmount - updatedPaidAmount;
+        
         await tx.purchase.update({
           where: { id: existingPayment.purchase.id },
           data: {
-            paidAmount: {
-              decrement: existingPayment.amount
-            }
+            paidAmount: updatedPaidAmount,
+            balance: updatedBalance
           }
         });
       }
